@@ -28,7 +28,11 @@ jobs:
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-        run: modal deploy app.py
+        run: |
+          # Stop the running app to kill any warm/stale containers,
+          # so the smoke test always hits freshly-built code.
+          modal app stop arabic-tts-arena 2>/dev/null || true
+          modal deploy app.py
 
       - name: Smoke test deployed models
         env:
