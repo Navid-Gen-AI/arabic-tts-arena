@@ -46,7 +46,6 @@ class HabibiTTSModel(BaseTTSModel):
         from f5_tts.api import F5TTS
 
         self.tts = F5TTS(
-            model_type="F5-TTS",
             ckpt_file="/root/checkpoints/habibi-tts/model_last.safetensors",
             vocab_file="/root/checkpoints/habibi-tts/vocab.txt",
             device="cuda",
