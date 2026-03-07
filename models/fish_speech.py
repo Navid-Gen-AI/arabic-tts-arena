@@ -9,8 +9,8 @@ fish_speech_image = (
     )
     .apt_install("ffmpeg", "libsndfile1", "espeak-ng", "portaudio19-dev", "clang")
     .uv_pip_install(
-        "torch>=2.0.0",
-        "torchaudio>=2.0.0",
+        "torch>=2.4.0,<2.5.0",
+        "torchaudio>=2.4.0,<2.5.0",  # >=2.5 removed list_audio_backends()
         "numpy",
         "soundfile",
         "huggingface_hub",
