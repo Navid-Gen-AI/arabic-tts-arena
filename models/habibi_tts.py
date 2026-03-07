@@ -17,13 +17,13 @@ habibi_image = (
         "huggingface_hub",
         "f5-tts",
     )
-    .add_local_python_source(*LOCAL_MODULES)
     # Pre-download the Habibi-TTS checkpoint
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         "snapshot_download('SWivid/Habibi-TTS', local_dir='/root/checkpoints/habibi-tts')\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 

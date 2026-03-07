@@ -17,7 +17,6 @@ spark_tts_image = (
         "soundfile",
         "huggingface_hub",
     )
-    .add_local_python_source(*LOCAL_MODULES)
     # Clone SparkTTS repo for inference code and install its dependencies
     .run_commands(
         "git clone https://github.com/SparkAudio/Spark-TTS.git /root/spark-tts && "
@@ -31,6 +30,7 @@ spark_tts_image = (
         "snapshot_download('IbrahimSalah/Arabic-TTS-Spark', local_dir='/root/checkpoints/arabic-spark-tts')\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 

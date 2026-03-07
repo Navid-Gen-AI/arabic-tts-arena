@@ -17,13 +17,13 @@ fish_speech_image = (
         "huggingface_hub",
         "fish-speech",
     )
-    .add_local_python_source(*LOCAL_MODULES)
     # Pre-download the OpenAudio S1-mini checkpoint
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         "snapshot_download('fishaudio/openaudio-s1-mini', local_dir='/root/checkpoints/openaudio-s1-mini')\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 

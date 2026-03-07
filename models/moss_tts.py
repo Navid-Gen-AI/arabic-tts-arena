@@ -17,13 +17,13 @@ moss_tts_image = (
         "transformers>=4.36.0",
         "accelerate",
     )
-    .add_local_python_source(*LOCAL_MODULES)
     .run_commands(
         "pip install --upgrade pip && "
         "git clone https://github.com/OpenMOSS/MOSS-TTS.git /tmp/moss-tts && "
         "cd /tmp/moss-tts && pip install . && "
         "rm -rf /tmp/moss-tts"
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 
