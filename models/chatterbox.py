@@ -12,7 +12,7 @@ chatterbox_image = (
     .uv_pip_install(
         "torch>=2.0.0",
         "torchaudio>=2.0.0",
-        "numpy",
+        "numpy>=1.26.0",
         "soundfile",
         "chatterbox-tts",
     )
