@@ -34,4 +34,4 @@ jobs:
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-        run: python scripts/smoke_test.py
+        run: python scripts/smoke_test.py moss_tts
