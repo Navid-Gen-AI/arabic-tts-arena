@@ -2,7 +2,7 @@
 Arabic TTS Arena — Models package.
 
 Contains:
-- MODEL_REGISTRY: dict mapping model_id → display_name
+- MODEL_REGISTRY: dict mapping model_id → {class_name, display_name}
 - BaseTTSModel: base class all TTS models inherit from
 - register_model: decorator to register a model
 - Auto-discovery of all model files in this directory
@@ -20,7 +20,7 @@ from pathlib import Path
 # Model Registry
 # =============================================================================
 
-MODEL_REGISTRY: dict[str, str] = {}
+MODEL_REGISTRY: dict[str, dict[str, str]] = {}
 
 
 def register_model(cls):
@@ -28,12 +28,16 @@ def register_model(cls):
     Decorator to register a TTS model class.
 
     The class must have `model_id` and `display_name` class attributes.
+    Stores both the Python class name (for Modal lookup) and display name (for UI).
     """
     model_id = getattr(cls, "model_id", None)
     if model_id is None:
         raise ValueError(f"Model class {cls.__name__} must have a 'model_id' class attribute")
     display_name = getattr(cls, "display_name", None) or cls.__name__
-    MODEL_REGISTRY[model_id] = display_name
+    MODEL_REGISTRY[model_id] = {
+        "class_name": cls.__name__,
+        "display_name": display_name,
+    }
     return cls
 
 

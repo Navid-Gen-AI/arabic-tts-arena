@@ -60,7 +60,12 @@ def compute_leaderboard(
     stats: dict[str, ModelStats] = {}
 
     # Seed stats for every registered model
-    for model_id, display_name in registered_models.items():
+    for model_id, info in registered_models.items():
+        # Support both old format (str) and new format (dict)
+        if isinstance(info, dict):
+            display_name = info.get("display_name", model_id)
+        else:
+            display_name = info
         stats[model_id] = ModelStats(model_id=model_id, name=display_name)
 
     for vote in votes:

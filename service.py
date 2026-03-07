@@ -78,7 +78,11 @@ class ArenaService:
 
     @modal.method()
     def get_model_registry(self) -> dict:
-        """Return the current MODEL_REGISTRY so the frontend can discover models."""
+        """Return the current MODEL_REGISTRY so the frontend can discover models.
+
+        Returns dict like:
+            {"chatterbox": {"class_name": "ChatterboxModel", "display_name": "Chatterbox"}, ...}
+        """
         return dict(MODEL_REGISTRY)
 
     @modal.method()
