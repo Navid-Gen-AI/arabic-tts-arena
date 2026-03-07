@@ -14,13 +14,13 @@ habibi_image = (
         "torchaudio>=2.0.0",
         "numpy",
         "soundfile",
+        "huggingface_hub",
         "f5-tts",
     )
-    # Install HF CLI via system pip and pre-download the checkpoint
+    # Pre-download the Habibi-TTS checkpoint
     .run_commands(
-        "pip install huggingface-hub[cli] && "
-        "huggingface-cli download SWivid/Habibi-TTS "
-        "--local-dir /root/checkpoints/habibi-tts",
+        "python3 -c \"from huggingface_hub import snapshot_download; "
+        "snapshot_download('SWivid/Habibi-TTS', local_dir='/root/checkpoints/habibi-tts')\"",
         secrets=[modal.Secret.from_name("huggingface")],
     )
 )

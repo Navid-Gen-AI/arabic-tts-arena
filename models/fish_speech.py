@@ -14,13 +14,13 @@ fish_speech_image = (
         "torchaudio>=2.0.0",
         "numpy",
         "soundfile",
+        "huggingface_hub",
         "fish-speech",
     )
-    # Install HF CLI via system pip and pre-download the checkpoint
+    # Pre-download the OpenAudio S1-mini checkpoint
     .run_commands(
-        "pip install huggingface-hub[cli] && "
-        "huggingface-cli download fishaudio/openaudio-s1-mini "
-        "--local-dir /root/checkpoints/openaudio-s1-mini",
+        "python3 -c \"from huggingface_hub import snapshot_download; "
+        "snapshot_download('fishaudio/openaudio-s1-mini', local_dir='/root/checkpoints/openaudio-s1-mini')\"",
         secrets=[modal.Secret.from_name("huggingface")],
     )
 )

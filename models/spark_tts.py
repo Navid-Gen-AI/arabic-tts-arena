@@ -15,6 +15,7 @@ spark_tts_image = (
         "transformers>=4.36.0",
         "numpy",
         "soundfile",
+        "huggingface_hub",
     )
     # Clone SparkTTS repo for inference code and install its dependencies
     .run_commands(
@@ -23,11 +24,10 @@ spark_tts_image = (
         "pip install --upgrade pip && "
         "pip install -r requirements.txt || true"
     )
-    # Install HF CLI via system pip and download the Arabic checkpoint
+    # Download the Arabic fine-tuned checkpoint
     .run_commands(
-        "pip install huggingface-hub[cli] && "
-        "huggingface-cli download IbrahimSalah/Arabic-TTS-Spark "
-        "--local-dir /root/checkpoints/arabic-spark-tts",
+        "python3 -c \"from huggingface_hub import snapshot_download; "
+        "snapshot_download('IbrahimSalah/Arabic-TTS-Spark', local_dir='/root/checkpoints/arabic-spark-tts')\"",
         secrets=[modal.Secret.from_name("huggingface")],
     )
 )
