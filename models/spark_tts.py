@@ -38,6 +38,7 @@ spark_tts_image = (
     image=spark_tts_image,
     gpu="T4",
     scaledown_window=300,
+    retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class SparkTTSModel(BaseTTSModel):

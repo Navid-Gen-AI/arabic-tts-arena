@@ -31,6 +31,7 @@ moss_tts_image = (
     image=moss_tts_image,
     gpu="A10G",  # 8B model needs more VRAM than a T4
     scaledown_window=300,
+    retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class MossTTSModel(BaseTTSModel):

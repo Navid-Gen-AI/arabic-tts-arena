@@ -4,8 +4,12 @@ Post-deploy smoke test — verifies every registered TTS model can synthesize.
 Runs after `modal deploy` in CI to catch container boot failures, missing
 dependencies, or broken model weights before the frontend serves traffic.
 
+Each model gets a hard timeout (default 180 s).  If the container keeps
+crashing / respawning and never returns, the test fails fast instead of
+hanging forever.
+
 Usage:
-    python scripts/smoke_test.py          # test all models
+    python scripts/smoke_test.py                         # test all models
     python scripts/smoke_test.py chatterbox habibi_tts   # test specific models
 
 Exit codes:
@@ -16,22 +20,31 @@ Exit codes:
 import sys
 import time
 import modal
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 APP_NAME = "arabic-tts-arena"
 TEST_TEXT = "مرحباً"  # short Arabic phrase — fast to synthesize
-TIMEOUT_SECONDS = 120  # generous timeout for cold-start containers
+TIMEOUT_SECONDS = 180  # hard cap per model (includes cold start + inference)
+
+
+def _call_model(class_name: str) -> dict:
+    """Run the remote synthesis call (executed in a thread so we can time-out)."""
+    cls = modal.Cls.from_name(APP_NAME, class_name)
+    return cls().synthesize.remote(TEST_TEXT)
 
 
 def smoke_test_model(model_id: str, class_name: str) -> bool:
-    """Call synthesize() on a single model and verify it returns valid audio."""
+    """Call synthesize() on a single model with a hard timeout."""
     print(f"\n{'='*50}")
     print(f"🧪 Testing: {model_id} ({class_name})")
     print(f"{'='*50}")
 
     start = time.time()
     try:
-        cls = modal.Cls.from_name(APP_NAME, class_name)
-        result = cls().synthesize.remote(TEST_TEXT)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            future = pool.submit(_call_model, class_name)
+            result = future.result(timeout=TIMEOUT_SECONDS)
+
         elapsed = time.time() - start
 
         if not result.get("success"):
@@ -50,6 +63,12 @@ def smoke_test_model(model_id: str, class_name: str) -> bool:
         print(f"  ✅ PASS — {len(audio_b64):,} chars base64, sr={sr}")
         print(f"  ⏱  {elapsed:.1f}s")
         return True
+
+    except TimeoutError:
+        elapsed = time.time() - start
+        print(f"  ❌ FAIL — timed out after {TIMEOUT_SECONDS}s (container may be crash-looping)")
+        print(f"  ⏱  {elapsed:.1f}s")
+        return False
 
     except Exception as e:
         elapsed = time.time() - start
@@ -94,19 +113,19 @@ def main():
         results[model_id] = passed
 
     # Summary
-    passed = [m for m, ok in results.items() if ok]
-    failed = [m for m, ok in results.items() if not ok]
+    passed_list = [m for m, ok in results.items() if ok]
+    failed_list = [m for m, ok in results.items() if not ok]
 
     print(f"\n{'='*50}")
-    print(f"📊 Results: {len(passed)} passed, {len(failed)} failed out of {len(results)}")
+    print(f"📊 Results: {len(passed_list)} passed, {len(failed_list)} failed out of {len(results)}")
     print(f"{'='*50}")
 
-    if passed:
-        print(f"  ✅ Passed: {', '.join(passed)}")
-    if failed:
-        print(f"  ❌ Failed: {', '.join(failed)}")
+    if passed_list:
+        print(f"  ✅ Passed: {', '.join(passed_list)}")
+    if failed_list:
+        print(f"  ❌ Failed: {', '.join(failed_list)}")
 
-    sys.exit(1 if failed else 0)
+    sys.exit(1 if failed_list else 0)
 
 
 if __name__ == "__main__":
