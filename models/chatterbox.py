@@ -50,7 +50,6 @@ class ChatterboxModel(BaseTTSModel):
             wav = self.model.generate(
                 text,
                 exaggeration=0.4,  # lower = more natural prosody
-                cfg=0.5,           # classifier-free guidance strength
             )
 
             # wav is a torch tensor, convert to numpy

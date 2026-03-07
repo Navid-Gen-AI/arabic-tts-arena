@@ -80,9 +80,13 @@ class MossTTSModel(BaseTTSModel):
             import torch
             import numpy as np
 
-            # Prepare inputs via processor
+            # MOSS-TTS expects a conversation-format input
+            conversations = [
+                {"role": "user", "content": text},
+            ]
+
             inputs = self.processor(
-                text=text,
+                conversations=conversations,
                 return_tensors="pt",
             ).to("cuda")
 
