@@ -39,9 +39,16 @@ def register_all():
 
     Wrapped in a function to make the dependency explicit and avoid
     accidental re-import side effects.
+
+    Note: `service` is only available in the arena-service container and
+    during `modal deploy`.  Individual model containers only bundle `app`
+    and `models`, so the import is guarded to avoid circular-import crashes.
     """
     import models      # noqa: F401  — triggers model auto-discovery
-    import service     # noqa: F401  — ArenaService + cron job
+    try:
+        import service     # noqa: F401  — ArenaService + cron job
+    except ModuleNotFoundError:
+        pass  # Running inside a model container — service isn't needed
 
 
 register_all()
