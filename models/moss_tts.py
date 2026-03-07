@@ -90,26 +90,61 @@ class MossTTSModel(BaseTTSModel):
                 return_tensors="pt",
             ).to("cuda")
 
-            # Generate audio
+            # Generate — returns an AssistantMessage-like object
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=4096,
                 )
 
-            # Decode to waveform — try common API patterns
-            if hasattr(self.processor, 'decode'):
-                result = self.processor.decode(outputs)
-                if hasattr(result, 'audio'):
-                    wav = result.audio
-                elif hasattr(result, 'audio_codes_list'):
-                    wav = self.processor.codes_to_wav(result.audio_codes_list[0])
-                else:
-                    wav = result
-            elif hasattr(self.processor, 'batch_decode'):
-                wav = self.processor.batch_decode(outputs, return_audio=True)[0]
-            else:
-                wav = outputs
+            # Debug: log what we got back so we can trace the API
+            print(f"  generate() returned: {type(outputs)}")
+            if hasattr(outputs, '__dict__'):
+                print(f"  attrs: {list(outputs.__dict__.keys())}")
+
+            # Extract audio from the output — handle multiple API shapes
+            wav = None
+
+            # Shape 1: output has .audio attribute directly
+            if hasattr(outputs, 'audio'):
+                wav = outputs.audio
+
+            # Shape 2: output has .audio_codes / .audio_codes_list
+            elif hasattr(outputs, 'audio_codes'):
+                wav = self.processor.codes_to_wav(outputs.audio_codes)
+            elif hasattr(outputs, 'audio_codes_list'):
+                wav = self.processor.codes_to_wav(outputs.audio_codes_list[0])
+
+            # Shape 3: output is a message with .content containing audio
+            elif hasattr(outputs, 'content'):
+                content = outputs.content
+                if isinstance(content, (torch.Tensor, np.ndarray)):
+                    wav = content
+                elif isinstance(content, list):
+                    # Content might be a list of parts — find the audio part
+                    for part in content:
+                        if hasattr(part, 'audio'):
+                            wav = part.audio
+                            break
+                        if isinstance(part, (torch.Tensor, np.ndarray)):
+                            wav = part
+                            break
+
+            # Shape 4: processor.decode() handles the message
+            if wav is None and hasattr(self.processor, 'decode'):
+                decoded = self.processor.decode(outputs)
+                if hasattr(decoded, 'audio'):
+                    wav = decoded.audio
+                elif hasattr(decoded, 'audio_codes_list'):
+                    wav = self.processor.codes_to_wav(decoded.audio_codes_list[0])
+                elif isinstance(decoded, (torch.Tensor, np.ndarray)):
+                    wav = decoded
+
+            if wav is None:
+                return self.error_response(
+                    f"Could not extract audio from {type(outputs).__name__}. "
+                    f"Attrs: {dir(outputs)}"
+                )
 
             if isinstance(wav, torch.Tensor):
                 wav = wav.squeeze().cpu().float().numpy()
