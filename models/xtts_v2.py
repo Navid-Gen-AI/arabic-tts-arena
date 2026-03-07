@@ -1,9 +1,23 @@
 import modal
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app, base_gpu_image
+from app import app
 
-xtts_image = base_gpu_image.uv_pip_install("TTS>=0.22.0")
+# Coqui TTS requires Python < 3.12, so XTTS-v2 gets its own base image
+xtts_image = (
+    modal.Image.from_registry(
+        "nvidia/cuda:12.8.0-devel-ubuntu24.04",
+        add_python="3.11",
+    )
+    .apt_install("ffmpeg", "libsndfile1", "espeak-ng")
+    .uv_pip_install(
+        "torch>=2.0.0",
+        "torchaudio>=2.0.0",
+        "numpy",
+        "soundfile",
+        "TTS>=0.22.0",
+    )
+)
 
 
 @register_model

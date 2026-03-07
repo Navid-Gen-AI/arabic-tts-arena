@@ -10,14 +10,19 @@ Blind A/B voting platform for Arabic text-to-speech models. Users hear two anony
 
 ### Open-source model
 
-1. Create `models/your_model.py`:
+1. Create `models/your_model.py` with its own image:
 
 ```python
 import modal
 from models import BaseTTSModel, register_model
-from app import app, base_gpu_image
+from app import app
 
-your_image = base_gpu_image.uv_pip_install("your-package")
+# Each model defines its own image — install only what you need
+your_image = (
+    modal.Image.from_registry("nvidia/cuda:12.8.0-devel-ubuntu24.04", add_python="3.12")
+    .apt_install("ffmpeg", "libsndfile1")
+    .uv_pip_install("torch>=2.0.0", "numpy", "soundfile", "your-model-package")
+)
 
 @register_model
 @app.cls(image=your_image, gpu="T4", scaledown_window=300,
@@ -43,7 +48,7 @@ class YourModel(BaseTTSModel):
 
 ### API-based / closed-source model
 
-1. Copy [`models/example_api_model.py`](models/example_api_model.py) and adapt it. Uses `base_api_image` — lightweight, no GPU.
+1. Copy [`models/example_api_model.py`](models/example_api_model.py) and adapt it. Lightweight image, no GPU.
 2. Open a PR with your model code.
 3. DM the maintainer your API keys. We store them in an encrypted vault (never in git).
 

@@ -23,14 +23,20 @@ import modal
 import os
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app, base_api_image
+from app import app
 
 
 # ---------------------------------------------------------------------------
-# 1. (Optional) Extend the base API image if you need extra packages.
-#    Otherwise just use base_api_image directly.
+# 1. Define your image — lightweight, no GPU needed for API calls
 # ---------------------------------------------------------------------------
-# example_image = base_api_image.pip_install("your-extra-package")
+example_api_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install(
+        "requests",
+        "numpy",
+        "soundfile",
+    )
+)
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +44,7 @@ from app import app, base_api_image
 # ---------------------------------------------------------------------------
 @register_model
 @app.cls(
-    image=base_api_image,  # swap with example_image if you extended it
+    image=example_api_image,
     # No GPU needed — we're just calling an API
     scaledown_window=300,
     # ⬇️ This is your Modal secret name — must match what the maintainer creates

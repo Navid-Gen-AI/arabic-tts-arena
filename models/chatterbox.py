@@ -1,9 +1,22 @@
 import modal
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app, base_gpu_image
+from app import app
 
-chatterbox_image = base_gpu_image.uv_pip_install("chatterbox-tts")
+chatterbox_image = (
+    modal.Image.from_registry(
+        "nvidia/cuda:12.8.0-devel-ubuntu24.04",
+        add_python="3.12",
+    )
+    .apt_install("ffmpeg", "libsndfile1", "espeak-ng")
+    .uv_pip_install(
+        "torch>=2.0.0",
+        "torchaudio>=2.0.0",
+        "numpy",
+        "soundfile",
+        "chatterbox-tts",
+    )
+)
 
 
 @register_model
