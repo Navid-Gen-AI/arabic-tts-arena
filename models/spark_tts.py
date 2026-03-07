@@ -17,10 +17,12 @@ spark_tts_image = (
         "soundfile",
         "huggingface_hub",
     )
-    # Clone SparkTTS repo for inference code
+    # Clone SparkTTS repo for inference code and install its dependencies
     .run_commands(
         "git clone https://github.com/SparkAudio/Spark-TTS.git /root/spark-tts && "
-        "cd /root/spark-tts && pip install -e ."
+        "cd /root/spark-tts && "
+        "pip install --upgrade pip && "
+        "pip install -r requirements.txt || true"
     )
     # Download the Arabic fine-tuned checkpoint
     .run_commands(
