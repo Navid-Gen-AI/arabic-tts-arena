@@ -66,6 +66,7 @@ class ArenaService:
         return {
             mid: {
                 "name": s.name,
+                "model_url": s.model_url,
                 "elo": round(s.elo, 1),
                 "wins": s.wins,
                 "losses": s.losses,
@@ -129,6 +130,7 @@ def update_leaderboard_file():
                 "rank": i + 1,
                 "model_id": s.model_id,
                 "name": s.name,
+                "model_url": s.model_url,
                 "elo": round(s.elo, 1),
                 "wins": s.wins,
                 "losses": s.losses,

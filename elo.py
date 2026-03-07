@@ -30,9 +30,10 @@ def calculate_elo_draw(
 class ModelStats:
     """ELO statistics for a single model."""
 
-    def __init__(self, model_id: str, name: str, elo: float = 1500.0):
+    def __init__(self, model_id: str, name: str, elo: float = 1500.0, model_url: str = ""):
         self.model_id = model_id
         self.name = name
+        self.model_url = model_url
         self.elo = elo
         self.wins = 0
         self.losses = 0
@@ -64,9 +65,11 @@ def compute_leaderboard(
         # Support both old format (str) and new format (dict)
         if isinstance(info, dict):
             display_name = info.get("display_name", model_id)
+            model_url = info.get("model_url", "")
         else:
             display_name = info
-        stats[model_id] = ModelStats(model_id=model_id, name=display_name)
+            model_url = ""
+        stats[model_id] = ModelStats(model_id=model_id, name=display_name, model_url=model_url)
 
     for vote in votes:
         # Handle models that aren't in the current registry (removed/renamed)
