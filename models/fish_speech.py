@@ -1,7 +1,7 @@
 import modal
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 fish_speech_image = (
     modal.Image.from_registry(
@@ -17,6 +17,7 @@ fish_speech_image = (
         "huggingface_hub",
         "fish-speech",
     )
+    .add_local_python_source(*LOCAL_MODULES)
     # Pre-download the OpenAudio S1-mini checkpoint
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "

@@ -1,7 +1,7 @@
 import modal
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 chatterbox_image = (
     modal.Image.from_registry(
@@ -16,6 +16,7 @@ chatterbox_image = (
         "soundfile",
         "chatterbox-tts",
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 

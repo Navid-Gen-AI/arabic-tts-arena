@@ -1,7 +1,7 @@
 import modal
 from typing import Optional
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 spark_tts_image = (
     modal.Image.from_registry(
@@ -17,6 +17,7 @@ spark_tts_image = (
         "soundfile",
         "huggingface_hub",
     )
+    .add_local_python_source(*LOCAL_MODULES)
     # Clone SparkTTS repo for inference code and install its dependencies
     .run_commands(
         "git clone https://github.com/SparkAudio/Spark-TTS.git /root/spark-tts && "

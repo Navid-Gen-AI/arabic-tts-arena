@@ -20,10 +20,14 @@ votes_volume = modal.Volume.from_name("arabic-tts-votes", create_if_missing=True
 # Each TTS model defines its own image in its model file.
 # Only the arena service image is defined here.
 
+# Shared list of local modules every model container needs
+LOCAL_MODULES = ("app", "models")
+
 # ── Lightweight image for arena services (voting, leaderboard) ────────────
 service_image = (
     modal.Image.debian_slim(python_version="3.11")
     .uv_pip_install("pydantic", "huggingface_hub")
+    .add_local_python_source("app", "service", "storage", "elo", "models")
 )
 
 # =============================================================================
