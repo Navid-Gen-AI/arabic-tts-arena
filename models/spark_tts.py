@@ -68,17 +68,27 @@ class SparkTTSModel(BaseTTSModel):
         """Synthesize Arabic text to speech."""
         try:
             import torch
+            import tempfile
+            import numpy as np
+            import soundfile as sf
+
+            # SparkTTS.inference() requires a prompt_speech_path.
+            # For zero-shot, create a short silent WAV.
+            if not hasattr(self, "_silent_ref"):
+                silent = np.zeros(int(0.3 * self.sample_rate), dtype=np.float32)
+                tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                sf.write(tmp.name, silent, self.sample_rate)
+                self._silent_ref = tmp.name
 
             with torch.no_grad():
                 wav = self.model.inference(
                     text=text,
+                    prompt_speech_path=self._silent_ref,
                 )
 
-            # wav is a torch tensor
             if isinstance(wav, torch.Tensor):
                 wav_np = wav.squeeze().cpu().numpy()
             else:
-                import numpy as np
                 wav_np = wav if isinstance(wav, np.ndarray) else np.array(wav)
 
             audio_base64 = self.audio_to_base64(wav_np, self.sample_rate)

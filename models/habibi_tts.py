@@ -93,9 +93,21 @@ class HabibiTTSModel(BaseTTSModel):
     def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
+            import tempfile
+            import numpy as np
+            import soundfile as sf
+
+            # F5-TTS requires an actual audio file as ref_file (can't be empty).
+            # Create a short silent WAV for zero-shot synthesis.
+            if not hasattr(self, "_silent_ref"):
+                silent = np.zeros(int(0.3 * self.sample_rate), dtype=np.float32)
+                tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+                sf.write(tmp.name, silent, self.sample_rate)
+                self._silent_ref = tmp.name
+
             wav, sr, _ = self.tts.infer(
-                ref_file="",   # zero-shot — no reference audio needed
-                ref_text="",   # no reference text
+                ref_file=self._silent_ref,
+                ref_text=".",
                 gen_text=text,
             )
 

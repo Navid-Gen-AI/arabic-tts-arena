@@ -80,39 +80,43 @@ class MossTTSModel(BaseTTSModel):
             import torch
             import numpy as np
 
-            # Build the input message for MOSS-TTS
-            message = self.processor.build_user_message(text=text)
-            inputs = self.processor.to_model_inputs(
-                [message],
+            # Prepare inputs via processor
+            inputs = self.processor(
+                text=text,
                 return_tensors="pt",
             ).to("cuda")
 
             # Generate audio tokens — params tuned for Arabic clarity
             with torch.no_grad():
                 outputs = self.model.generate(
-                    input_ids=inputs["input_ids"],
-                    attention_mask=inputs["attention_mask"],
+                    **inputs,
                     max_new_tokens=4096,
-                    temperature=1.2,          # lower than default for clearer Arabic
-                    top_p=0.85,               # slightly tighter nucleus sampling
+                    temperature=1.2,
+                    top_p=0.85,
                     top_k=25,
-                    repetition_penalty=1.05,  # gentle penalty to avoid Arabic loops
+                    repetition_penalty=1.05,
                 )
 
-            # Decode the generated tokens to audio
-            result_message = self.processor.decode(outputs)
-            audio_codes = result_message.audio_codes_list[0]
-
-            # Convert audio codes to waveform
-            wav = self.processor.codes_to_wav(audio_codes)
+            # Decode to waveform — try common API patterns
+            if hasattr(self.processor, 'decode'):
+                result = self.processor.decode(outputs)
+                if hasattr(result, 'audio'):
+                    wav = result.audio
+                elif hasattr(result, 'audio_codes_list'):
+                    wav = self.processor.codes_to_wav(result.audio_codes_list[0])
+                else:
+                    wav = result
+            elif hasattr(self.processor, 'batch_decode'):
+                wav = self.processor.batch_decode(outputs, return_audio=True)[0]
+            else:
+                wav = outputs
 
             if isinstance(wav, torch.Tensor):
-                wav = wav.squeeze().cpu().numpy()
+                wav = wav.squeeze().cpu().float().numpy()
             elif not isinstance(wav, np.ndarray):
-                wav = np.array(wav)
+                wav = np.array(wav, dtype=np.float32)
 
             audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-
             return self.success_response(audio_base64, self.sample_rate)
         except Exception as e:
             return self.error_response(e)

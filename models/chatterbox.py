@@ -49,8 +49,7 @@ class ChatterboxModel(BaseTTSModel):
         try:
             wav = self.model.generate(
                 text,
-                lang="ar",
-                exaggeration=0.4,  # lower = more natural Arabic prosody
+                exaggeration=0.4,  # lower = more natural prosody
                 cfg=0.5,           # classifier-free guidance strength
             )
 
