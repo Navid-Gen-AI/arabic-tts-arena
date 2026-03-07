@@ -90,53 +90,82 @@ class MossTTSModel(BaseTTSModel):
                 return_tensors="pt",
             ).to("cuda")
 
-            # Generate — returns a list of AssistantMessage objects
+            # Generate
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=4096,
                 )
 
-            # outputs is a list — get the first message
-            message = outputs[0] if isinstance(outputs, list) else outputs
+            # Deep introspection of what generate() returns
+            def describe(obj, depth=0, max_depth=3):
+                prefix = "  " * depth
+                t = type(obj).__name__
+                if isinstance(obj, torch.Tensor):
+                    return f"{prefix}Tensor shape={obj.shape} dtype={obj.dtype}"
+                elif isinstance(obj, np.ndarray):
+                    return f"{prefix}ndarray shape={obj.shape} dtype={obj.dtype}"
+                elif isinstance(obj, (list, tuple)):
+                    lines = [f"{prefix}{t} len={len(obj)}"]
+                    if depth < max_depth:
+                        for i, item in enumerate(obj[:3]):  # first 3 items
+                            lines.append(f"{prefix}  [{i}]: {describe(item, depth+1, max_depth)}")
+                        if len(obj) > 3:
+                            lines.append(f"{prefix}  ... and {len(obj)-3} more")
+                    return "\n".join(lines)
+                elif isinstance(obj, dict):
+                    lines = [f"{prefix}dict keys={list(obj.keys())[:10]}"]
+                    if depth < max_depth:
+                        for k in list(obj.keys())[:3]:
+                            lines.append(f"{prefix}  {k}: {describe(obj[k], depth+1, max_depth)}")
+                    return "\n".join(lines)
+                elif hasattr(obj, '__dict__'):
+                    attrs = {k: v for k, v in obj.__dict__.items() if not k.startswith('_')}
+                    lines = [f"{prefix}{t} attrs={list(attrs.keys())}"]
+                    if depth < max_depth:
+                        for k in list(attrs.keys())[:5]:
+                            lines.append(f"{prefix}  {k}: {describe(attrs[k], depth+1, max_depth)}")
+                    return "\n".join(lines)
+                else:
+                    s = str(obj)
+                    return f"{prefix}{t}: {s[:200]}"
 
-            # Debug: log what the message looks like
-            print(f"  message type: {type(message)}")
-            if hasattr(message, '__dict__'):
-                print(f"  message attrs: {list(message.__dict__.keys())}")
+            description = describe(outputs)
+            print(f"  OUTPUTS STRUCTURE:\n{description}")
 
-            # Extract audio codes from the message and decode to waveform
+            # Now try to extract audio based on what we learned
             wav = None
 
-            if hasattr(message, 'audio_codes_list') and message.audio_codes_list:
-                wav = self.processor.codes_to_wav(message.audio_codes_list[0])
-            elif hasattr(message, 'audio_codes'):
-                wav = self.processor.codes_to_wav(message.audio_codes)
-            elif hasattr(message, 'audio'):
-                wav = message.audio
-            elif hasattr(message, 'content'):
-                # content might be the audio directly or contain audio parts
-                content = message.content
-                if isinstance(content, (torch.Tensor, np.ndarray)):
-                    wav = content
-                elif isinstance(content, list):
-                    for part in content:
-                        if hasattr(part, 'audio_codes_list') and part.audio_codes_list:
-                            wav = self.processor.codes_to_wav(part.audio_codes_list[0])
+            # If outputs is a list of tuples, the tuple likely contains
+            # (text_tokens, audio_codes) or similar
+            first = outputs[0] if isinstance(outputs, (list, tuple)) else outputs
+            if isinstance(first, (list, tuple)):
+                for i, element in enumerate(first):
+                    if isinstance(element, torch.Tensor):
+                        print(f"  tuple[{i}]: Tensor shape={element.shape} dtype={element.dtype}")
+                        # Audio codes are typically 2D (codebooks x timesteps)
+                        # or 1D waveform
+                        if element.dim() >= 2 and hasattr(self.processor, 'codes_to_wav'):
+                            try:
+                                wav = self.processor.codes_to_wav(element)
+                                print(f"  → codes_to_wav succeeded from tuple[{i}]")
+                                break
+                            except Exception as e:
+                                print(f"  → codes_to_wav failed on tuple[{i}]: {e}")
+                        elif element.dim() == 1 and element.shape[0] > 100:
+                            # Might be raw waveform
+                            wav = element
+                            print(f"  → Using tuple[{i}] as raw waveform")
                             break
-                        if hasattr(part, 'audio'):
-                            wav = part.audio
-                            break
-            else:
-                return self.error_response(
-                    f"Cannot extract audio from {type(message).__name__}. "
-                    f"Attrs: {[a for a in dir(message) if not a.startswith('_')]}"
-                )
+            elif isinstance(first, torch.Tensor):
+                if first.dim() >= 2 and hasattr(self.processor, 'codes_to_wav'):
+                    wav = self.processor.codes_to_wav(first)
+                else:
+                    wav = first
 
             if wav is None:
                 return self.error_response(
-                    f"Audio extraction returned None from {type(message).__name__}. "
-                    f"Attrs: {[a for a in dir(message) if not a.startswith('_')]}"
+                    f"Could not extract audio. Structure: {description[:500]}"
                 )
 
             if isinstance(wav, torch.Tensor):
