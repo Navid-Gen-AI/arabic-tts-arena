@@ -2,123 +2,6 @@ import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# ── Build-time: deep introspection written to /tmp/moss_api_dump.txt ──
-_INTROSPECT_SCRIPT = r"""
-import json, inspect, sys, importlib, pkgutil
-
-info = {}
-
-# 1. Walk the moss_tts package tree
-try:
-    import moss_tts
-    info['package_modules'] = []
-    for finder, name, ispkg in pkgutil.walk_packages(moss_tts.__path__, moss_tts.__name__ + '.'):
-        info['package_modules'].append(name)
-except Exception as e:
-    info['package_walk_err'] = str(e)
-
-# 2. List public names in moss_tts
-try:
-    info['moss_tts_dir'] = [x for x in dir(moss_tts) if not x.startswith('_')]
-except:
-    pass
-
-# 3. Inspect processor class & instance
-try:
-    from transformers import AutoProcessor
-    proc = AutoProcessor.from_pretrained("OpenMOSS-Team/MOSS-TTS", trust_remote_code=True)
-    info['processor_type'] = type(proc).__name__
-    info['processor_module'] = type(proc).__module__
-    info['processor_methods'] = [m for m in dir(proc) if not m.startswith('_')]
-    # Check for __call__ signature
-    try:
-        info['processor_call_sig'] = str(inspect.signature(proc.__call__))
-    except:
-        pass
-    # Check for any audio-related methods
-    for m in dir(proc):
-        if any(kw in m.lower() for kw in ['audio', 'wav', 'decode', 'synth', 'vocod', 'codec', 'codes']):
-            info.setdefault('processor_audio_methods', []).append(m)
-except Exception as e:
-    info['processor_err'] = str(e)
-
-# 4. Inspect model class
-try:
-    from transformers import AutoModel
-    import torch
-    model = AutoModel.from_pretrained(
-        "OpenMOSS-Team/MOSS-TTS", trust_remote_code=True,
-        torch_dtype=torch.bfloat16,
-    )
-    info['model_type'] = type(model).__name__
-    info['model_module'] = type(model).__module__
-    info['model_class_file'] = inspect.getfile(type(model))
-    info['model_config_type'] = type(model.config).__name__
-    # Config attributes
-    config_attrs = {}
-    for k in dir(model.config):
-        if not k.startswith('_'):
-            v = getattr(model.config, k)
-            if not callable(v):
-                try:
-                    json.dumps(v)
-                    config_attrs[k] = v
-                except:
-                    config_attrs[k] = str(v)[:200]
-    info['config'] = config_attrs
-    # Model methods
-    info['model_methods'] = [m for m in dir(model) if not m.startswith('_') and callable(getattr(model, m, None))]
-    # Audio-related model methods
-    for m in dir(model):
-        if any(kw in m.lower() for kw in ['audio', 'wav', 'decode', 'synth', 'vocod', 'codec', 'codes', 'generate']):
-            info.setdefault('model_audio_methods', []).append(m)
-    # generate signature
-    try:
-        info['generate_sig'] = str(inspect.signature(model.generate))
-    except:
-        pass
-    # Check sub-modules
-    info['model_children'] = [(name, type(child).__name__) for name, child in model.named_children()]
-
-    # Read the model source file
-    try:
-        src_file = inspect.getfile(type(model))
-        with open(src_file) as f:
-            info['model_source'] = f.read()[:15000]
-    except:
-        pass
-
-    # Read the processor source file
-    try:
-        src_file = inspect.getfile(type(proc))
-        with open(src_file) as f:
-            info['processor_source'] = f.read()[:15000]
-    except:
-        pass
-
-    del model
-except Exception as e:
-    info['model_err'] = str(e)
-
-# 5. Check if pipeline works (CPU, no actual inference)
-try:
-    from transformers import pipeline as hf_pipeline
-    from transformers.pipelines import SUPPORTED_TASKS
-    info['supported_tasks'] = list(SUPPORTED_TASKS.keys())
-    # Check text-to-audio
-    if 'text-to-audio' in SUPPORTED_TASKS:
-        info['text_to_audio_class'] = str(SUPPORTED_TASKS['text-to-audio'])
-except Exception as e:
-    info['pipeline_err'] = str(e)
-
-with open('/tmp/moss_api_dump.json', 'w') as f:
-    json.dump(info, f, indent=2, default=str)
-print("=== MOSS API DUMP COMPLETE ===")
-for k, v in info.items():
-    if k not in ('model_source', 'processor_source', 'config'):
-        print(f"  {k}: {v}")
-"""
-
 moss_tts_image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.8.0-devel-ubuntu24.04",
@@ -138,10 +21,6 @@ moss_tts_image = (
         "git clone https://github.com/OpenMOSS/MOSS-TTS.git /tmp/moss-tts && "
         "cd /tmp/moss-tts && pip install . && "
         "rm -rf /tmp/moss-tts",
-    )
-    .run_commands(
-        # Deep introspection at build time
-        f"python3 -c {repr(_INTROSPECT_SCRIPT)}"
     )
     .add_local_python_source(*LOCAL_MODULES)
 )
@@ -165,25 +44,13 @@ class MossTTSModel(BaseTTSModel):
     @modal.enter()
     def load_model(self):
         """Load the MOSS-TTS model when container starts."""
-        import json
+        import inspect
         import torch
         from transformers import AutoModel, AutoProcessor
 
         torch.backends.cuda.enable_cudnn_sdp(False)
 
         model_name = "OpenMOSS-Team/MOSS-TTS"
-
-        # Load the API dump from build time
-        self.api_info = {}
-        try:
-            with open("/tmp/moss_api_dump.json") as f:
-                self.api_info = json.load(f)
-            print("=== MOSS API Info ===")
-            for k, v in self.api_info.items():
-                if k not in ('model_source', 'processor_source', 'config'):
-                    print(f"  {k}: {v}")
-        except Exception as e:
-            print(f"  ⚠️ Could not load API dump: {e}")
 
         # Load processor and model
         self.processor = AutoProcessor.from_pretrained(
@@ -203,9 +70,39 @@ class MossTTSModel(BaseTTSModel):
                 break
         self.sample_rate = sr
 
-        # Discover the model's actual synthesis method from its source
-        model_src = self.api_info.get('model_source', '')
-        proc_src = self.api_info.get('processor_source', '')
+        # ── Runtime introspection ──
+        # Read the actual source code of the model and processor classes
+        self._model_source = ""
+        self._proc_source = ""
+        try:
+            src_file = inspect.getfile(type(self.model))
+            with open(src_file) as f:
+                self._model_source = f.read()
+            print(f"   Model source: {src_file} ({len(self._model_source)} chars)")
+        except Exception as e:
+            print(f"   Could not read model source: {e}")
+        try:
+            src_file = inspect.getfile(type(self.processor))
+            with open(src_file) as f:
+                self._proc_source = f.read()
+            print(f"   Processor source: {src_file} ({len(self._proc_source)} chars)")
+        except Exception as e:
+            print(f"   Could not read processor source: {e}")
+
+        # Dump model children (sub-modules)
+        children = [(n, type(c).__name__) for n, c in self.model.named_children()]
+        print(f"   Model children: {children}")
+
+        # Audio-related methods
+        for obj_name, obj in [("model", self.model), ("processor", self.processor)]:
+            audio_methods = [m for m in dir(obj)
+                             if not m.startswith('_')
+                             and callable(getattr(obj, m, None))
+                             and any(kw in m.lower() for kw in
+                                     ['audio', 'wav', 'decode', 'synth', 'vocod',
+                                      'codec', 'codes', 'generate', 'speech'])]
+            print(f"   {obj_name} audio-related methods: {audio_methods}")
+
         print(f"✅ MOSS-TTS loaded (sr={self.sample_rate})")
         print(f"   model type:     {type(self.model).__name__}")
         print(f"   processor type: {type(self.processor).__name__}")
@@ -215,12 +112,11 @@ class MossTTSModel(BaseTTSModel):
     def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
-            import json
             import torch
             import numpy as np
 
-            model_src = self.api_info.get('model_source', '')
-            proc_src = self.api_info.get('processor_source', '')
+            model_src = self._model_source
+            proc_src = self._proc_source
 
             # ─────────────────────────────────────────────────
             # Strategy 1: Direct synthesis methods on model
