@@ -1,5 +1,4 @@
 import modal
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
@@ -85,7 +84,7 @@ class FishSpeechModel(BaseTTSModel):
         print(f"✅ Fish Speech S1-mini loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
             import numpy as np
@@ -96,8 +95,8 @@ class FishSpeechModel(BaseTTSModel):
                 max_new_tokens=1024,
                 chunk_length=300,
                 top_p=0.8,
-                repetition_penalty=1.1,
-                temperature=0.8,
+                repetition_penalty=1.2,  # slightly higher to avoid Arabic phoneme loops
+                temperature=0.7,         # lower = more stable Arabic output
             )
 
             audio_segments = []

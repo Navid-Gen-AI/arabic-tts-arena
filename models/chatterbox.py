@@ -1,5 +1,4 @@
 import modal
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
@@ -44,14 +43,14 @@ class ChatterboxModel(BaseTTSModel):
         print(f"✅ Chatterbox multilingual loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
             wav = self.model.generate(
                 text,
                 lang="ar",
-                exaggeration=0.5,
-                cfg=0.5,
+                exaggeration=0.4,  # lower = more natural Arabic prosody
+                cfg=0.5,           # classifier-free guidance strength
             )
 
             # wav is a torch tensor, convert to numpy

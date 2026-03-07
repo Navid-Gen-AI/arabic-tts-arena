@@ -21,7 +21,6 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 
 import modal
 import os
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app
 
@@ -77,7 +76,7 @@ class ExampleAPIModel(BaseTTSModel):
 
     # ── Core method ────────────────────────────────────────────────────────
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """
         Generate Arabic speech from text by calling your API.
 

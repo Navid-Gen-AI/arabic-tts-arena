@@ -1,5 +1,4 @@
 import modal
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
@@ -56,12 +55,12 @@ class HabibiTTSModel(BaseTTSModel):
         print(f"✅ Habibi-TTS loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
             wav, sr, _ = self.tts.infer(
-                ref_file="",  # no reference audio — zero-shot
-                ref_text="",
+                ref_file="",   # zero-shot — no reference audio needed
+                ref_text="",   # no reference text
                 gen_text=text,
             )
 

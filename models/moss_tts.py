@@ -1,5 +1,4 @@
 import modal
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
@@ -74,7 +73,7 @@ class MossTTSModel(BaseTTSModel):
         print(f"✅ MOSS-TTS loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
             import torch
@@ -87,16 +86,16 @@ class MossTTSModel(BaseTTSModel):
                 return_tensors="pt",
             ).to("cuda")
 
-            # Generate audio tokens
+            # Generate audio tokens — params tuned for Arabic clarity
             with torch.no_grad():
                 outputs = self.model.generate(
                     input_ids=inputs["input_ids"],
                     attention_mask=inputs["attention_mask"],
                     max_new_tokens=4096,
-                    temperature=1.7,
-                    top_p=0.8,
+                    temperature=1.2,          # lower than default for clearer Arabic
+                    top_p=0.85,               # slightly tighter nucleus sampling
                     top_k=25,
-                    repetition_penalty=1.0,
+                    repetition_penalty=1.05,  # gentle penalty to avoid Arabic loops
                 )
 
             # Decode the generated tokens to audio

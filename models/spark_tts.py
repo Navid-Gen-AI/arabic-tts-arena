@@ -1,5 +1,4 @@
 import modal
-from typing import Optional
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
@@ -64,7 +63,7 @@ class SparkTTSModel(BaseTTSModel):
         print(f"✅ Arabic Spark-TTS loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, speaker_wav: Optional[str] = None) -> dict:
+    def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
         try:
             import torch
@@ -72,7 +71,6 @@ class SparkTTSModel(BaseTTSModel):
             with torch.no_grad():
                 wav = self.model.inference(
                     text=text,
-                    prompt_speech_path=speaker_wav,
                 )
 
             # wav is a torch tensor
