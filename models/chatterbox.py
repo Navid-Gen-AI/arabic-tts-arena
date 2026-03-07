@@ -35,12 +35,12 @@ class ChatterboxModel(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load the Chatterbox multilingual model when container starts."""
-        from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+        """Load the Chatterbox TTS model when container starts."""
+        from chatterbox.tts import ChatterboxTTS
 
-        self.model = ChatterboxMultilingualTTS.from_pretrained(device="cuda")
+        self.model = ChatterboxTTS.from_pretrained(device="cuda")
         self.sample_rate = self.model.sr
-        print(f"✅ Chatterbox multilingual loaded on CUDA (sr={self.sample_rate})")
+        print(f"✅ Chatterbox loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
