@@ -18,6 +18,8 @@ fish_speech_image = (
     )
     # Pre-download the OpenAudio S1-mini checkpoint
     .run_commands(
+        # Create .project-root marker that pyrootutils expects
+        "touch /usr/local/lib/python3.12/site-packages/.project-root",
         "python3 -c \"from huggingface_hub import snapshot_download; "
         "snapshot_download('fishaudio/openaudio-s1-mini', local_dir='/root/checkpoints/openaudio-s1-mini')\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
