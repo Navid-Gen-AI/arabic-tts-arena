@@ -48,7 +48,7 @@ class ChatterboxModel(BaseTTSModel):
         try:
             wav = self.model.generate(
                 text,
-                language_id="ar",
+                lang="ar",
                 exaggeration=0.5,
                 cfg=0.5,
             )

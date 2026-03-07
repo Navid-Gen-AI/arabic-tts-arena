@@ -103,7 +103,7 @@ class BaseTTSModel:
 def _discover_models():
     """Import all .py files in models/ to trigger @register_model decorators."""
     package_dir = Path(__file__).parent
-    skip = {"__init__", "base", "example_api_model"}  # skip base stub & example template
+    skip = {"__init__", "example_api_model"}  # skip base stub, example template & deprecated models
     for module_info in pkgutil.iter_modules([str(package_dir)]):
         if module_info.name in skip:
             continue

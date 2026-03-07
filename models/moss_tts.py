@@ -18,9 +18,10 @@ moss_tts_image = (
         "accelerate",
     )
     .run_commands(
+        "pip install --upgrade pip && "
         "git clone https://github.com/OpenMOSS/MOSS-TTS.git /tmp/moss-tts && "
-        "cd /tmp/moss-tts && pip install -e . && "
-        "rm -rf /tmp/moss-tts/.git"
+        "cd /tmp/moss-tts && pip install . && "
+        "rm -rf /tmp/moss-tts"
     )
 )
 
@@ -62,7 +63,13 @@ class MossTTSModel(BaseTTSModel):
             attn_implementation="sdpa",
         ).to("cuda")
 
-        self.sample_rate = self.processor.model_config.sampling_rate
+        # Get sample rate — try processor config first, then model config, then default
+        if hasattr(self.processor, 'model_config') and hasattr(self.processor.model_config, 'sampling_rate'):
+            self.sample_rate = self.processor.model_config.sampling_rate
+        elif hasattr(self.model.config, 'sampling_rate'):
+            self.sample_rate = self.model.config.sampling_rate
+        else:
+            self.sample_rate = 24000  # MOSS-TTS default
         print(f"✅ MOSS-TTS loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
