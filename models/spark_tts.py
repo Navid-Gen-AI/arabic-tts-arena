@@ -28,7 +28,7 @@ spark_tts_image = (
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         "snapshot_download('IbrahimSalah/Arabic-TTS-Spark', local_dir='/root/checkpoints/arabic-spark-tts')\"",
-        secrets=[modal.Secret.from_name("huggingface")],
+        secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
 )
 
@@ -38,7 +38,7 @@ spark_tts_image = (
     image=spark_tts_image,
     gpu="T4",
     scaledown_window=300,
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class SparkTTSModel(BaseTTSModel):
     """Arabic-TTS-Spark — SparkTTS fine-tuned for Arabic speech synthesis."""

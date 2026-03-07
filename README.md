@@ -26,7 +26,7 @@ your_image = (
 
 @register_model
 @app.cls(image=your_image, gpu="T4", scaledown_window=300,
-         secrets=[modal.Secret.from_name("huggingface")])
+         secrets=[modal.Secret.from_name("hf-ar-tts-arena")])
 class YourModel(BaseTTSModel):
     model_id = "your_model"
     display_name = "Your Model"

@@ -24,7 +24,7 @@ chatterbox_image = (
     image=chatterbox_image,
     gpu="T4",
     scaledown_window=300,
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class ChatterboxModel(BaseTTSModel):
     """ResembleAI Chatterbox — multilingual TTS with Arabic support."""

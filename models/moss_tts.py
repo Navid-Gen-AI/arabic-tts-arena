@@ -31,7 +31,7 @@ moss_tts_image = (
     image=moss_tts_image,
     gpu="A10G",  # 8B model needs more VRAM than a T4
     scaledown_window=300,
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class MossTTSModel(BaseTTSModel):
     """OpenMOSS MOSS-TTS — 8B parameter multilingual TTS with Arabic support."""

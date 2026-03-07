@@ -21,7 +21,7 @@ habibi_image = (
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         "snapshot_download('SWivid/Habibi-TTS', local_dir='/root/checkpoints/habibi-tts')\"",
-        secrets=[modal.Secret.from_name("huggingface")],
+        secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
 )
 
@@ -31,7 +31,7 @@ habibi_image = (
     image=habibi_image,
     gpu="T4",
     scaledown_window=300,
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class HabibiTTSModel(BaseTTSModel):
     """Habibi-TTS — F5-TTS fine-tuned for Arabic speech synthesis."""

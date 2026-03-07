@@ -107,7 +107,7 @@ class ArenaService:
     image=service_image,
     volumes={"/data": votes_volume},
     schedule=modal.Cron("0 0 * * *"),
-    secrets=[modal.Secret.from_name("huggingface")],
+    secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 def update_leaderboard_file():
     """Recompute ELO from all votes and upload leaderboard.json."""
