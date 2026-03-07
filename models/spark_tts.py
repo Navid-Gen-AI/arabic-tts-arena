@@ -26,7 +26,7 @@ spark_tts_image = (
     )
     # Download the Arabic fine-tuned checkpoint
     .run_commands(
-        "huggingface-cli download IbrahimSalah/Arabic-TTS-Spark "
+        "python -m huggingface_hub.commands.huggingface_cli download IbrahimSalah/Arabic-TTS-Spark "
         "--local-dir /root/checkpoints/arabic-spark-tts",
         secrets=[modal.Secret.from_name("huggingface")],
     )

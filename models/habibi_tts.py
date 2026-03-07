@@ -19,7 +19,7 @@ habibi_image = (
     )
     # Pre-download the Habibi-TTS checkpoint
     .run_commands(
-        "huggingface-cli download SWivid/Habibi-TTS "
+        "python -m huggingface_hub.commands.huggingface_cli download SWivid/Habibi-TTS "
         "--local-dir /root/checkpoints/habibi-tts",
         secrets=[modal.Secret.from_name("huggingface")],
     )

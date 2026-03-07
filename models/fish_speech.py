@@ -18,7 +18,7 @@ fish_speech_image = (
         "fish-speech",
     )
     .run_commands(
-        "huggingface-cli download fishaudio/openaudio-s1-mini "
+        "python -m huggingface_hub.commands.huggingface_cli download fishaudio/openaudio-s1-mini "
         "--local-dir /root/checkpoints/openaudio-s1-mini",
         secrets=[modal.Secret.from_name("huggingface")],
     )
