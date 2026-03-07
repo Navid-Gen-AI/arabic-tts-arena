@@ -8,7 +8,7 @@ fish_speech_image = (
         "nvidia/cuda:12.8.0-devel-ubuntu24.04",
         add_python="3.12",
     )
-    .apt_install("ffmpeg", "libsndfile1", "espeak-ng")
+    .apt_install("ffmpeg", "libsndfile1", "espeak-ng", "portaudio19-dev", "clang")
     .uv_pip_install(
         "torch>=2.0.0",
         "torchaudio>=2.0.0",
