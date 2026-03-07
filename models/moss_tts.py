@@ -165,27 +165,77 @@ class MossTTSModel(BaseTTSModel):
 
             wav = None
 
-            # Try codes_to_wav on each 2D+ tensor
-            if hasattr(self.processor, 'codes_to_wav'):
-                for path, tensor in tensors:
-                    if tensor.dim() >= 2:
+            # Extract the audio codes tensor: outputs[0][1] is shape [42, 33]
+            # (42 codebooks × 33 timesteps)
+            audio_codes = outputs[0][1] if isinstance(outputs[0], tuple) else None
+
+            if audio_codes is not None and audio_codes.dim() >= 2:
+                print(f"  audio_codes shape: {list(audio_codes.shape)}")
+
+                # Try every available decode method
+                decode_attempts = []
+
+                # 1. processor.codes_to_wav
+                if hasattr(self.processor, 'codes_to_wav'):
+                    try:
+                        wav = self.processor.codes_to_wav(audio_codes)
+                        decode_attempts.append("processor.codes_to_wav ✓")
+                    except Exception as e:
+                        decode_attempts.append(f"processor.codes_to_wav ✗: {e}")
+
+                # 2. processor.decode with audio codes
+                if wav is None and hasattr(self.processor, 'decode'):
+                    for fmt in [audio_codes, audio_codes.unsqueeze(0), [audio_codes]]:
                         try:
-                            wav = self.processor.codes_to_wav(tensor)
-                            print(f"  ✓ codes_to_wav on {path}")
-                            break
+                            result = self.processor.decode(fmt)
+                            if isinstance(result, torch.Tensor):
+                                wav = result
+                            elif hasattr(result, 'audio'):
+                                wav = result.audio
+                            elif isinstance(result, dict) and 'audio' in result:
+                                wav = result['audio']
+                            if wav is not None:
+                                decode_attempts.append("processor.decode ✓")
+                                break
                         except Exception as e:
-                            print(f"  ✗ codes_to_wav on {path}: {e}")
+                            decode_attempts.append(f"processor.decode ✗: {e}")
 
-            # Try 1D tensors as raw waveform
-            if wav is None:
-                for path, tensor in tensors:
-                    if tensor.dim() == 1 and tensor.shape[0] > 100:
-                        wav = tensor
-                        print(f"  ✓ Using {path} as waveform")
-                        break
+                # 3. model.decode / model.decoder
+                if wav is None:
+                    decoder = getattr(self.model, 'decode', None) or getattr(self.model, 'decoder', None)
+                    if decoder is not None:
+                        for fmt in [audio_codes.unsqueeze(0), audio_codes]:
+                            try:
+                                wav = decoder(fmt) if callable(decoder) else decoder.decode(fmt)
+                                decode_attempts.append("model.decode ✓")
+                                break
+                            except Exception as e:
+                                decode_attempts.append(f"model.decode ✗: {e}")
+
+                # 4. model.codes_to_audio / model.decode_codes
+                if wav is None:
+                    for method_name in ['codes_to_audio', 'decode_codes', 'vocoder', 'audio_decoder']:
+                        method = getattr(self.model, method_name, None)
+                        if method is not None and callable(method):
+                            try:
+                                wav = method(audio_codes.unsqueeze(0))
+                                decode_attempts.append(f"model.{method_name} ✓")
+                                break
+                            except Exception as e:
+                                decode_attempts.append(f"model.{method_name} ✗: {e}")
+
+                # 5. Log all model & processor public methods for debugging
+                if wav is None:
+                    proc_methods = [m for m in dir(self.processor) if not m.startswith('_') and callable(getattr(self.processor, m, None))]
+                    model_methods = [m for m in dir(self.model) if not m.startswith('_') and callable(getattr(self.model, m, None))]
+                    return self.error_response(
+                        f"All decode attempts failed: {decode_attempts}. "
+                        f"Processor methods: {proc_methods[:30]}. "
+                        f"Model methods: {model_methods[:30]}"
+                    )
 
             if wav is None:
-                return self.error_response(f"No audio extracted. Structure: {desc}")
+                return self.error_response(f"No audio codes found. Structure: {desc}")
 
             if isinstance(wav, torch.Tensor):
                 wav = wav.squeeze().cpu().float().numpy()
