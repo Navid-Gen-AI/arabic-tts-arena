@@ -90,15 +90,11 @@ class MossTTSModel(BaseTTSModel):
                 return_tensors="pt",
             ).to("cuda")
 
-            # Generate audio tokens — params tuned for Arabic clarity
+            # Generate audio
             with torch.no_grad():
                 outputs = self.model.generate(
                     **inputs,
                     max_new_tokens=4096,
-                    temperature=1.2,
-                    top_p=0.85,
-                    top_k=25,
-                    repetition_penalty=1.05,
                 )
 
             # Decode to waveform — try common API patterns
