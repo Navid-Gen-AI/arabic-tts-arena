@@ -7,12 +7,19 @@ from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import asdict
 
+import random
+
 import modal
 
 from app import app, service_image, votes_volume
 from models import MODEL_REGISTRY
-from storage import Vote, load_votes, append_vote, save_audio
+from storage import Vote, load_votes, append_vote, save_audio, normalize_text, build_audio_cache
 from elo import compute_leaderboard
+
+# Probability of returning cached audio when a cache hit exists.
+# Set < 1.0 so a fraction of requests still trigger fresh synthesis
+# for variety (models use stochastic sampling).
+CACHE_HIT_RATE = 0.7
 
 
 # =============================================================================
@@ -26,6 +33,55 @@ from elo import compute_leaderboard
 )
 class ArenaService:
     """Handles vote persistence and leaderboard computation on Modal."""
+
+    @modal.enter()
+    def _build_cache(self):
+        """Build in-memory audio cache index from stored votes on container start."""
+        self._audio_cache = build_audio_cache()
+        print(f"✅ Audio cache loaded: {len(self._audio_cache)} entries")
+
+    # -----------------------------------------------------------------
+    # Synthesis with cache
+    # -----------------------------------------------------------------
+
+    @modal.method()
+    def synthesize_or_cache(self, text: str, model_id: str) -> dict:
+        """Return cached audio when available, otherwise synthesize fresh.
+
+        With probability (1 - CACHE_HIT_RATE) a cache hit is deliberately
+        skipped so users still hear varied outputs from stochastic models.
+        """
+        norm = normalize_text(text)
+        cache_key = (norm, model_id)
+
+        # --- try cache ---
+        if cache_key in self._audio_cache and random.random() < CACHE_HIT_RATE:
+            audio_path = self._audio_cache[cache_key]
+            if os.path.exists(audio_path):
+                try:
+                    with open(audio_path, "rb") as f:
+                        audio_b64 = base64.b64encode(f.read()).decode()
+                    print(f"⚡ Cache hit for ({model_id}, {norm[:40]}…)")
+                    return {
+                        "success": True,
+                        "audio_base64": audio_b64,
+                        "model_id": model_id,
+                        "cached": True,
+                    }
+                except Exception as e:
+                    print(f"⚠️ Cache read failed, falling through to synthesis: {e}")
+
+        # --- cache miss → call the model ---
+        try:
+            ModelCls = modal.Cls.from_name("arabic-tts-arena", MODEL_REGISTRY[model_id]["class_name"])
+            result = ModelCls().synthesize.remote(text)
+            return result
+        except Exception as e:
+            return {"success": False, "error": str(e), "model_id": model_id}
+
+    # -----------------------------------------------------------------
+    # Vote recording
+    # -----------------------------------------------------------------
 
     @modal.method()
     def record_vote(
@@ -54,6 +110,14 @@ class ArenaService:
             )
             append_vote(vote)
             votes_volume.commit()
+
+            # Update in-memory cache so subsequent requests benefit immediately
+            norm = normalize_text(text)
+            if audio_path_a:
+                self._audio_cache[(norm, model_a)] = audio_path_a
+            if audio_path_b:
+                self._audio_cache[(norm, model_b)] = audio_path_b
+
             return {"success": True}
         except Exception as e:
             print(f"❌ record_vote failed: {e}")
