@@ -109,7 +109,7 @@ class SparkTTSModel(BaseTTSModel):
     """
 
     model_id = "spark_tts"
-    display_name = "Spark TTS (Arabic)"
+    display_name = "Arabic Spark TTS"
     model_url = "https://huggingface.co/IbrahimSalah/Arabic-TTS-Spark"
 
     @modal.enter()

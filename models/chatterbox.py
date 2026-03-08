@@ -56,7 +56,7 @@ class ChatterboxModel(BaseTTSModel):
     """ResembleAI Chatterbox Multilingual — TTS with Arabic support."""
 
     model_id = "chatterbox"
-    display_name = "Chatterbox"
+    display_name = "Multilingual Chatterbox"
     model_url = "https://huggingface.co/ResembleAI/chatterbox"
 
     @modal.enter()
