@@ -17,14 +17,17 @@ Exit codes:
     1  — one or more models failed
 """
 
+import base64
+import os
 import sys
 import time
 import modal
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 APP_NAME = "arabic-tts-arena"
-TEST_TEXT = "مرحباً"  # short Arabic phrase — fast to synthesize
+TEST_TEXT = "مرحباً كيف حالك ؟"  # short Arabic phrase — fast to synthesize
 TIMEOUT_SECONDS = 180  # hard cap per model (includes cold start + inference)
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "smoke_test_outputs")
 
 
 def _call_model(class_name: str) -> dict:
@@ -59,6 +62,13 @@ def smoke_test_model(model_id: str, class_name: str) -> bool:
             print(f"  ❌ FAIL — audio_base64 is empty or too short ({len(audio_b64)} chars)")
             print(f"  ⏱  {elapsed:.1f}s")
             return False
+
+        # Save the audio locally so it can be listened to
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        out_path = os.path.join(OUTPUT_DIR, f"{model_id}.wav")
+        with open(out_path, "wb") as f:
+            f.write(base64.b64decode(audio_b64))
+        print(f"  💾 Saved: {os.path.abspath(out_path)}")
 
         print(f"  ✅ PASS — {len(audio_b64):,} chars base64, sr={sr}")
         print(f"  ⏱  {elapsed:.1f}s")

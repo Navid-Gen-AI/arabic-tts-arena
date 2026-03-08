@@ -2,6 +2,13 @@ import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
+# Reference text for the Unified model (MSA — Modern Standard Arabic).
+# Source: official Habibi-TTS assets (ElevenLabs voice library, ID JjTirzdD7T3GMLkwdd3a).
+_REF_TEXT = (
+    "كان اللعيب حاضرًا في العديد من الأنشطة والفعاليات المرتبطة بكأس العالم، "
+    "مما سمح للجماهير بالتفاعل معه والتقاط الصور التذكارية."
+)
+
 habibi_image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.8.0-devel-ubuntu24.04",
@@ -13,18 +20,24 @@ habibi_image = (
         "torchaudio>=2.0.0",
         "numpy",
         "soundfile",
-        "huggingface_hub",
+        "huggingface_hub[hf_xet]",
         "f5-tts",
+        "cached-path",
     )
-    # Pre-download the Habibi-TTS checkpoint + Vocos vocoder
+    # Pre-download the Unified checkpoint + vocab + MSA reference audio
     .run_commands(
         "python3 -c \""
-        "from huggingface_hub import snapshot_download; "
-        "snapshot_download('SWivid/Habibi-TTS', local_dir='/root/checkpoints/habibi-tts'); "
-        "snapshot_download('charactr/vocos-mel-24khz', local_dir='/root/checkpoints/vocos-mel-24khz')"
+        "from cached_path import cached_path; "
+        "print('ckpt:', cached_path('hf://SWivid/Habibi-TTS/Unified/model_200000.safetensors')); "
+        "print('vocab:', cached_path('hf://SWivid/Habibi-TTS/Unified/vocab.txt'))"
         "\"",
-        # Debug: show full tree so we know where the ckpt + vocab live
-        "find /root/checkpoints/habibi-tts -type f | head -40",
+        # Download MSA reference audio from the official Habibi-TTS HF Space
+        "python3 -c \""
+        "from huggingface_hub import hf_hub_download; "
+        "p = hf_hub_download(repo_id='chenxie95/Habibi-TTS', repo_type='space', "
+        "filename='assets/MSA.mp3', local_dir='/root'); "
+        "print('ref audio downloaded:', p)"
+        "\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
     .add_local_python_source(*LOCAL_MODULES)
@@ -40,7 +53,7 @@ habibi_image = (
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class HabibiTTSModel(BaseTTSModel):
-    """Habibi-TTS — F5-TTS fine-tuned for Arabic speech synthesis."""
+    """Habibi-TTS — F5-TTS fine-tuned for Arabic speech synthesis (Unified model)."""
 
     model_id = "habibi_tts"
     display_name = "Habibi TTS"
@@ -48,70 +61,69 @@ class HabibiTTSModel(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load Habibi-TTS (F5-TTS Arabic) when container starts."""
-        import os
-        import glob
-        from f5_tts.api import F5TTS
+        """Load Habibi-TTS Unified model when container starts."""
+        from cached_path import cached_path
+        from f5_tts.infer.utils_infer import load_model, load_vocoder
+        from f5_tts.model import DiT
 
-        base = "/root/checkpoints/habibi-tts"
+        # Habibi-TTS Unified model config — identical to F5TTS_v1_Base architecture
+        self._model_cfg = dict(
+            dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4
+        )
 
-        # The repo has subdirs (Unified/, Specialized/) — find the checkpoint
-        ckpt_candidates = glob.glob(f"{base}/**/model_last.safetensors", recursive=True)
-        if not ckpt_candidates:
-            # Fallback: any .safetensors / .pt file
-            ckpt_candidates = (
-                glob.glob(f"{base}/**/*.safetensors", recursive=True)
-                + glob.glob(f"{base}/**/*.pt", recursive=True)
-            )
-        if not ckpt_candidates:
-            raise FileNotFoundError(f"No checkpoint found under {base}")
-
-        ckpt_file = ckpt_candidates[0]
-        ckpt_parent = os.path.dirname(ckpt_file)
-
-        # Look for vocab file next to the checkpoint
-        vocab_file = ""
-        for name in ("vocab.txt", "vocab.json"):
-            path = os.path.join(ckpt_parent, name)
-            if os.path.exists(path):
-                vocab_file = path
-                break
+        # Resolve checkpoint & vocab paths (cached from image build)
+        ckpt_file = str(
+            cached_path("hf://SWivid/Habibi-TTS/Unified/model_200000.safetensors")
+        )
+        vocab_file = str(
+            cached_path("hf://SWivid/Habibi-TTS/Unified/vocab.txt")
+        )
 
         print(f"  ckpt file : {ckpt_file}")
-        print(f"  vocab file: {vocab_file or '(none)'}")
-        print(f"  ckpt dir  : {os.listdir(ckpt_parent)}")
+        print(f"  vocab file: {vocab_file}")
 
-        self.tts = F5TTS(
-            ckpt_file=ckpt_file,
+        # Load the model using F5-TTS low-level API (same as official Habibi-TTS code)
+        self.ema_model = load_model(
+            DiT,
+            self._model_cfg,
+            ckpt_file,
+            mel_spec_type="vocos",
             vocab_file=vocab_file,
             device="cuda",
         )
-        self.sample_rate = 24000  # F5-TTS default
-        print(f"✅ Habibi-TTS loaded on CUDA (sr={self.sample_rate})")
+
+        # Load the Vocos vocoder (downloaded automatically by F5-TTS)
+        self.vocoder = load_vocoder(vocoder_name="vocos", device="cuda")
+
+        self.sample_rate = 24000
+        self._ref_audio = "/root/assets/MSA.mp3"
+        self._ref_text = _REF_TEXT
+
+        print(f"✅ Habibi-TTS Unified loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Synthesize Arabic text to speech."""
+        """Synthesize Arabic text to speech using the Unified model."""
         try:
-            import tempfile
-            import numpy as np
-            import soundfile as sf
+            from f5_tts.infer.utils_infer import infer_process, preprocess_ref_audio_text
 
-            # F5-TTS requires an actual audio file as ref_file (can't be empty).
-            # Create a short silent WAV for zero-shot synthesis.
-            if not hasattr(self, "_silent_ref"):
-                silent = np.zeros(int(0.3 * self.sample_rate), dtype=np.float32)
-                tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-                sf.write(tmp.name, silent, self.sample_rate)
-                self._silent_ref = tmp.name
-
-            wav, sr, _ = self.tts.infer(
-                ref_file=self._silent_ref,
-                ref_text=".",
-                gen_text=text,
+            # Preprocess the reference audio (resampling, trimming, ASR if needed)
+            ref_audio, ref_text = preprocess_ref_audio_text(
+                self._ref_audio, self._ref_text, show_info=print
             )
 
-            # wav is a numpy array from F5-TTS
+            # Run inference — matches official Habibi-TTS infer_process() usage
+            wav, sr, _ = infer_process(
+                ref_audio,
+                ref_text,
+                text,
+                self.ema_model,
+                self.vocoder,
+                mel_spec_type="vocos",
+                speed=1.0,
+                device="cuda",
+            )
+
             audio_base64 = self.audio_to_base64(wav, sr)
             return self.success_response(audio_base64, sr)
         except Exception as e:
