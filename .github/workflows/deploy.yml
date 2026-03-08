@@ -33,9 +33,3 @@ jobs:
           # so the smoke test always hits freshly-built code.
           modal app stop arabic-tts-arena 2>/dev/null || true
           modal deploy app.py
-
-      # - name: Smoke test deployed models
-      #   env:
-      #     MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
-      #     MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
-      #   run: python scripts/smoke_test.py moss_tts
