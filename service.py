@@ -50,6 +50,10 @@ class ArenaService:
 
         With probability (1 - CACHE_HIT_RATE) a cache hit is deliberately
         skipped so users still hear varied outputs from stochastic models.
+
+        For models that support multiple dialects, a dialect is randomly
+        sampled and passed to synthesize() so users experience the full
+        quality spectrum of each model.
         """
         norm = normalize_text(text)
         cache_key = (norm, model_id)
@@ -73,8 +77,18 @@ class ArenaService:
 
         # --- cache miss → call the model ---
         try:
-            ModelCls = modal.Cls.from_name("arabic-tts-arena", MODEL_REGISTRY[model_id]["class_name"])
-            result = ModelCls().synthesize.remote(text)
+            model_info = MODEL_REGISTRY[model_id]
+            ModelCls = modal.Cls.from_name("arabic-tts-arena", model_info["class_name"])
+
+            # If the model supports dialects, randomly sample one
+            dialects = model_info.get("dialects", [])
+            if dialects:
+                dialect = random.choice(dialects)
+                print(f"🗣️ Sampling dialect '{dialect}' for {model_id}")
+                result = ModelCls().synthesize.remote(text, dialect=dialect)
+            else:
+                result = ModelCls().synthesize.remote(text)
+
             return result
         except Exception as e:
             return {"success": False, "error": str(e), "model_id": model_id}

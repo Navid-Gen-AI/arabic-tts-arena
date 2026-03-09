@@ -115,7 +115,6 @@ class SparkTTSModel(BaseTTSModel):
     @modal.enter()
     def load_model(self):
         """Load TTS model, processor, and tashkeel model."""
-        import torch
         from transformers import AutoModel, AutoProcessor
         from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
@@ -128,8 +127,12 @@ class SparkTTSModel(BaseTTSModel):
             model_name, trust_remote_code=True,
         ).eval().to("cuda")
 
-        # The official Space sets processor.model = model
-        self.processor.model = self.model
+        # Link the model to the processor so it can call
+        # tokenize_audio / detokenize_audio and sync sampling rates.
+        # The official Space uses `processor.model = model` but
+        # link_model() additionally validates the model interface and
+        # synchronises processor.sampling_rate from the model config.
+        self.processor.link_model(self.model)
 
         # Load tashkeel model on CPU (it's tiny — 75M params)
         self.tashkeel_tokenizer = AutoTokenizer.from_pretrained(_TASHKEEL_MODEL_ID)
@@ -139,7 +142,7 @@ class SparkTTSModel(BaseTTSModel):
 
         self.ref_audio = "/root/spark-ref/reference.wav"
         self.ref_text = _REF_TRANSCRIPT
-        self.sample_rate = 24000  # Will be confirmed from output
+        self.sample_rate = 16000  # Model config specifies 16 kHz
 
         print(f"✅ Arabic Spark-TTS + tashkeel loaded on CUDA (sr={self.sample_rate})")
 
@@ -218,10 +221,16 @@ class SparkTTSModel(BaseTTSModel):
             print(f"[spark_tts] output_ids shape: {output_ids.shape}")
 
             # Decode to audio
+            # CRITICAL: skip_special_tokens must be False so that bicodec
+            # tokens (e.g. <|bicodec_semantic_1234|>) are preserved in the
+            # decoded text.  The processor.decode() regex-parses them to
+            # reconstruct the waveform.  With the default (True) the
+            # tokenizer strips them → almost no semantic tokens → silence.
             output = self.processor.decode(
                 generated_ids=output_ids,
                 global_token_ids_prompt=global_tokens_prompt,
                 input_ids_len=input_ids_len,
+                skip_special_tokens=False,
             )
 
             print(f"[spark_tts] decode keys: {list(output.keys())}")

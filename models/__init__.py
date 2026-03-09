@@ -29,17 +29,25 @@ def register_model(cls):
 
     The class must have `model_id` and `display_name` class attributes.
     Stores the Python class name (for Modal lookup), display name (for UI),
-    and model_url (for leaderboard links).
+    model_url (for leaderboard links), and supported dialects.
+
+    Optional class attribute:
+        dialects: list[str] — dialect codes the model can synthesize.
+            e.g. ["msa", "eg", "sa", "mo", "iq"].
+            Empty list or absent means the model only supports MSA / has no
+            dialect knob.
     """
     model_id = getattr(cls, "model_id", None)
     if model_id is None:
         raise ValueError(f"Model class {cls.__name__} must have a 'model_id' class attribute")
     display_name = getattr(cls, "display_name", None) or cls.__name__
     model_url = getattr(cls, "model_url", "")
+    dialects = getattr(cls, "dialects", [])
     MODEL_REGISTRY[model_id] = {
         "class_name": cls.__name__,
         "display_name": display_name,
         "model_url": model_url,
+        "dialects": list(dialects),
     }
     return cls
 

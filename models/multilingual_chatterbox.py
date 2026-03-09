@@ -55,7 +55,7 @@ chatterbox_image = (
 class ChatterboxModel(BaseTTSModel):
     """ResembleAI Chatterbox Multilingual — TTS with Arabic support."""
 
-    model_id = "chatterbox"
+    model_id = "multilingual_chatterbox"
     display_name = "Multilingual Chatterbox"
     model_url = "https://huggingface.co/ResembleAI/chatterbox"
 
