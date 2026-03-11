@@ -146,6 +146,7 @@ class ArenaService:
                 "name": s.name,
                 "model_url": s.model_url,
                 "elo": round(s.elo, 1),
+                "ci": round(s.ci, 1),
                 "wins": s.wins,
                 "losses": s.losses,
                 "ties": s.ties,
@@ -193,7 +194,7 @@ class ArenaService:
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 def update_leaderboard_file():
-    """Recompute ELO from all votes and upload leaderboard.json."""
+    """Recompute Bradley-Terry ratings from all votes and upload leaderboard.json."""
     from huggingface_hub import HfApi
 
     votes = load_votes()
@@ -210,6 +211,7 @@ def update_leaderboard_file():
                 "name": s.name,
                 "model_url": s.model_url,
                 "elo": round(s.elo, 1),
+                "ci": round(s.ci, 1),
                 "wins": s.wins,
                 "losses": s.losses,
                 "ties": s.ties,
