@@ -1,6 +1,15 @@
-"""Arabic TTS Arena — Vote data model and persistence (JSONL + audio)."""
+"""Arabic TTS Arena — Vote data model and persistence (per-vote JSON files + audio).
+
+Each vote is written to its own JSON file under /data/votes/ to avoid
+race conditions when multiple Modal containers commit the volume
+concurrently.  The legacy /data/votes.jsonl is still read (if present)
+for backward compatibility.
+"""
 
 import json
+import os
+import time
+import uuid
 import base64
 import re
 import unicodedata
@@ -35,7 +44,8 @@ class Vote:
 # Paths (inside the Modal Volume mounted at /data)
 # =============================================================================
 
-VOTES_FILE = Path("/data/votes.jsonl")
+VOTES_DIR = Path("/data/votes")            # NEW: one JSON file per vote
+LEGACY_VOTES_FILE = Path("/data/votes.jsonl")  # OLD: kept for backward compat
 AUDIO_DIR = Path("/data/audio")
 
 
@@ -43,23 +53,77 @@ AUDIO_DIR = Path("/data/audio")
 # Read / Write helpers
 # =============================================================================
 
+def _parse_vote(data: dict) -> Vote:
+    """Safely construct a Vote from a dict, ignoring unknown keys."""
+    known = {f.name for f in Vote.__dataclass_fields__.values()}
+    return Vote(**{k: v for k, v in data.items() if k in known})
+
+
 def load_votes() -> list[Vote]:
-    """Read all votes from the JSONL file."""
-    if not VOTES_FILE.exists():
-        return []
-    votes = []
-    with open(VOTES_FILE, "r") as f:
-        for line in f:
-            if line.strip():
-                votes.append(Vote(**json.loads(line)))
+    """Load all votes from individual JSON files *and* the legacy JSONL.
+
+    Returns a combined list sorted by timestamp.  Duplicates (same
+    session_id) are removed so migrated votes aren't double-counted.
+    """
+    seen_sessions: set[str] = set()
+    votes: list[Vote] = []
+
+    # 1. Legacy votes.jsonl (read first so new files take precedence)
+    if LEGACY_VOTES_FILE.exists():
+        try:
+            with open(LEGACY_VOTES_FILE, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                        vote = _parse_vote(data)
+                        if vote.session_id not in seen_sessions:
+                            seen_sessions.add(vote.session_id)
+                            votes.append(vote)
+                    except Exception:
+                        continue  # skip corrupted lines
+        except Exception:
+            pass
+
+    # 2. Individual vote files (one JSON per vote)
+    if VOTES_DIR.exists():
+        for filepath in sorted(VOTES_DIR.glob("*.json")):
+            try:
+                with open(filepath, "r") as f:
+                    data = json.loads(f.read())
+                vote = _parse_vote(data)
+                if vote.session_id not in seen_sessions:
+                    seen_sessions.add(vote.session_id)
+                    votes.append(vote)
+            except Exception:
+                continue  # skip corrupted files
+
+    votes.sort(key=lambda v: v.timestamp)
     return votes
 
 
-def append_vote(vote: Vote):
-    """Append a single vote to the JSONL file."""
-    VOTES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(VOTES_FILE, "a") as f:
-        f.write(json.dumps(asdict(vote), ensure_ascii=False) + "\n")
+def append_vote(vote: Vote) -> str:
+    """Write a single vote as a unique JSON file and return its path.
+
+    Each vote gets its own file so concurrent Modal containers can
+    never overwrite each other's data on volume commit.
+    The file is fsynced to ensure durability before commit().
+    """
+    VOTES_DIR.mkdir(parents=True, exist_ok=True)
+
+    ts_ms = int(time.time() * 1000)
+    unique_id = uuid.uuid4().hex[:12]
+    filepath = VOTES_DIR / f"{ts_ms}_{unique_id}.json"
+
+    data = json.dumps(asdict(vote), ensure_ascii=False)
+    with open(filepath, "w") as f:
+        f.write(data + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+    return str(filepath)
 
 
 def save_audio(session_id: str, suffix: str, audio_base64: str) -> str:
