@@ -125,6 +125,7 @@ class ModelStats:
         self.wins = 0
         self.losses = 0
         self.ties = 0
+        self._latency_samples: list[float] = []  # raw latency values for averaging
 
     @property
     def battles(self) -> int:
@@ -133,6 +134,13 @@ class ModelStats:
     @property
     def win_rate(self) -> float:
         return round(self.wins / self.battles * 100, 1) if self.battles > 0 else 0.0
+
+    @property
+    def avg_latency(self) -> float | None:
+        """Average synthesis latency in seconds, or None if no data."""
+        if not self._latency_samples:
+            return None
+        return sum(self._latency_samples) / len(self._latency_samples)
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +193,12 @@ def compute_leaderboard(
             stats[b_id].ties += 1
             win_matrix[a_id][b_id] += 0.5
             win_matrix[b_id][a_id] += 0.5
+
+        # Accumulate latency samples (only non-null = fresh synthesis)
+        if vote.latency_a is not None:
+            stats[a_id]._latency_samples.append(vote.latency_a)
+        if vote.latency_b is not None:
+            stats[b_id]._latency_samples.append(vote.latency_b)
 
     # Fit BT model on models that have at least one battle
     active_ids = [mid for mid, s in stats.items() if s.battles > 0]

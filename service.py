@@ -3,6 +3,7 @@
 import os
 import json
 import base64
+import time
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import asdict
@@ -82,13 +83,18 @@ class ArenaService:
 
             # If the model supports dialects, randomly sample one
             dialects = model_info.get("dialects", [])
+
+            t0 = time.perf_counter()
             if dialects:
                 dialect = random.choice(dialects)
                 print(f"🗣️ Sampling dialect '{dialect}' for {model_id}")
                 result = ModelCls().synthesize.remote(text, dialect=dialect)
             else:
                 result = ModelCls().synthesize.remote(text)
+            latency = round(time.perf_counter() - t0, 2)
 
+            if isinstance(result, dict):
+                result["latency_seconds"] = latency
             return result
         except Exception as e:
             return {"success": False, "error": str(e), "model_id": model_id}
@@ -107,6 +113,8 @@ class ArenaService:
         winner: str,
         audio_a_base64: Optional[str] = None,
         audio_b_base64: Optional[str] = None,
+        latency_a: Optional[float] = None,
+        latency_b: Optional[float] = None,
     ) -> dict:
         """Record a vote, save audio files, and commit the volume."""
         try:
@@ -121,6 +129,8 @@ class ArenaService:
                 winner=winner,
                 audio_path_a=audio_path_a,
                 audio_path_b=audio_path_b,
+                latency_a=latency_a,
+                latency_b=latency_b,
             )
             append_vote(vote)
             votes_volume.commit()
@@ -152,6 +162,7 @@ class ArenaService:
                 "ties": s.ties,
                 "battles": s.battles,
                 "win_rate": s.win_rate,
+                "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
             }
             for mid, s in stats.items()
         }
@@ -217,6 +228,7 @@ def update_leaderboard_file():
                 "ties": s.ties,
                 "battles": s.battles,
                 "win_rate": s.win_rate,
+                "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
             }
             for i, s in enumerate(ranked)
         ],

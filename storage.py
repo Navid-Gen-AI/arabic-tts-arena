@@ -37,6 +37,8 @@ class Vote:
     winner: str  # 'model_a' | 'model_b' | 'both_good' | 'both_bad'
     audio_path_a: Optional[str] = None
     audio_path_b: Optional[str] = None
+    latency_a: Optional[float] = None   # synthesis time in seconds (None = cached / legacy)
+    latency_b: Optional[float] = None
     timestamp: str = field(default_factory=_now_iso)
 
 
