@@ -15,13 +15,14 @@ Blind A/B voting platform for Arabic text-to-speech models. Users hear two anony
 ```python
 import modal
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 # Each model defines its own image — install only what you need
 your_image = (
     modal.Image.from_registry("nvidia/cuda:12.8.0-devel-ubuntu24.04", add_python="3.12")
     .apt_install("ffmpeg", "libsndfile1")
     .uv_pip_install("torch>=2.0.0", "numpy", "soundfile", "your-model-package")
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 @register_model
@@ -30,6 +31,7 @@ your_image = (
 class YourModel(BaseTTSModel):
     model_id = "your_model"
     display_name = "Your Model"
+    model_url = "https://huggingface.co/your-org/your-model"
 
     @modal.enter()
     def load_model(self):
