@@ -9,8 +9,12 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 1. Copy this file:     cp example_api_model.py  your_company_tts.py
 2. Edit the class below with your API details.
 3. Open a PR with your model file.
-4. After the PR is merged, DM the maintainer of the repo your API credentials.
-   Your keys are stored in an encrypted vault (never in git).
+4. After the PR is merged, DM the maintainer of the repo your API
+   credentials. They will run ONE command to store them securely:
+
+       modal secret create example-company-tts API_KEY=sk-xxx API_URL=https://...
+
+   Your keys are stored in Modal's encrypted vault — never in git.
 
 === That's it. ===
 """
@@ -18,43 +22,42 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 import modal
 import os
 from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from app import app
 
 # ---------------------------------------------------------------------------
 # 1. Define your image — lightweight, no GPU needed for API calls
 # ---------------------------------------------------------------------------
-example_api_image = (
+silma_tts_pro_msa_large_api_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install(
+    .pip_install(
         "requests",
-        "numpy",
-        "soundfile",
     )
-    .add_local_python_source(*LOCAL_MODULES)
 )
+
 
 # ---------------------------------------------------------------------------
 # 2. Register your model
 # ---------------------------------------------------------------------------
+
 @register_model
 @app.cls(
-    image=example_api_image,
+    image=silma_tts_pro_msa_large_api_image,
     # No GPU needed — we're just calling an API
     scaledown_window=300,
     # ⬇️ This is your Modal secret name — must match what the maintainer creates
-    secrets=[modal.Secret.from_name("example-company-tts")],
+    secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
-class ExampleAPIModel(BaseTTSModel):
-    """
-    Example Company TTS — API-based Arabic text-to-speech.
 
-    Replace this docstring with a short description of your model.
+class SILMATTS_APIModel(BaseTTSModel):
+    """
+    SILMA TTS — API-based Arabic text-to-speech.
+
     """
 
     # ── Required class attributes ──────────────────────────────────────────
-    model_id = "example_api"                         # unique, lowercase, underscores
-    display_name = "Example Company TTS"             # shown in the arena UI
-    model_url = "https://example.com/tts"            # link to your model/product page
+    model_id = "silma_tts_pro_msa_large"                         # unique, lowercase, underscores
+    display_name = "SILMA TTS v1 Large"             # shown in the arena UI
+    model_url = "https://silma.ai/arabic-tts-models"            # link to your model/product page
     gpu = ""                                         # empty for API-based models (no GPU)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
@@ -80,55 +83,46 @@ class ExampleAPIModel(BaseTTSModel):
             self.success_response(audio_base64, sample_rate)  — on success
             self.error_response(error)                        — on failure
         """
-        import requests
-        import numpy as np
-        import io
+        import http.client
+        import json
 
         try:
             # ── Call your API ──────────────────────────────────────────────
-            response = requests.post(
-                self.api_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "text": text,
-                    "language": "ar",
-                    # Add any other parameters your API expects:
-                    # "voice": "default",
-                    # "speed": 1.0,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
 
-            # ── Parse the response ─────────────────────────────────────────
-            #
-            # Adapt this section to match your API's response format.
-            # Common patterns:
-            #
-            #   A) API returns raw audio bytes (WAV/MP3):
-            #      audio_bytes = response.content
-            #
-            #   B) API returns JSON with base64 audio:
-            #      audio_base64 = response.json()["audio"]
-            #
-            #   C) API returns JSON with a download URL:
-            #      audio_url = response.json()["audio_url"]
-            #      audio_bytes = requests.get(audio_url).content
+            conn = http.client.HTTPSConnection(f"{self.api_url}")
 
-            # --- Example: API returns raw WAV bytes ---
-            import soundfile as sf
+            payload = {
+                        "model_id": "silma-tts-pro-msa-large",
+                        "text": text,
+                        "reference_audio_id": "Sulaiman",
+                        "nfe_steps": 16
+                    }
 
-            audio_bytes = response.content
-            wav_array, sample_rate = sf.read(io.BytesIO(audio_bytes))
+            headers = {
+                'Accept': "application/json",
+                'Content-Type': "application/json",
+                'apiKey': f"{self.api_key}"
+            }
 
-            if not isinstance(wav_array, np.ndarray):
-                wav_array = np.array(wav_array)
+            conn.request("POST", "/tts/generate", json.dumps(payload), headers)
 
-            audio_base64 = self.audio_to_base64(wav_array, sample_rate)
-            return self.success_response(audio_base64, sample_rate)
+            res = conn.getresponse()
+
+            if res.status >= 400:
+                raise Exception(f"HTTP Error {res.status}: {res.reason}")
+        
+            data = res.read()
+
+            response_dict = json.loads(data.decode("utf-8"))
+
+            ## get the generated audio wav as base64 from the response object
+            base64_string = response_dict.get('audio_base64_encoded')
+
+
+            if base64_string:
+                return self.success_response(base64_string, 24000)
+            else:
+                raise self.error_response("Missing 'audio_base64_encoded' in API response.")
 
         except Exception as e:
             return self.error_response(e)
