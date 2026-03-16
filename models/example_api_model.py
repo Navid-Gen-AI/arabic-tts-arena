@@ -9,12 +9,8 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 1. Copy this file:     cp example_api_model.py  your_company_tts.py
 2. Edit the class below with your API details.
 3. Open a PR with your model file.
-4. After the PR is merged, DM the maintainer of the repo your API
-   credentials. They will run ONE command to store them securely:
-
-       modal secret create example-company-tts API_KEY=sk-xxx API_URL=https://...
-
-   Your keys are stored in Modal's encrypted vault — never in git.
+4. After the PR is merged, DM the maintainer of the repo your API credentials.
+   Your keys are stored in an encrypted vault (never in git).
 
 === That's it. ===
 """
@@ -22,7 +18,7 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 import modal
 import os
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 
 # ---------------------------------------------------------------------------
@@ -30,11 +26,12 @@ from app import app
 # ---------------------------------------------------------------------------
 example_api_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install(
+    .uv_pip_install(
         "requests",
         "numpy",
         "soundfile",
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 
