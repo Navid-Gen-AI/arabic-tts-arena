@@ -22,21 +22,20 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 import modal
 import os
 from models import BaseTTSModel, register_model
-from app import app
-
+from app import app, LOCAL_MODULES
 
 # ---------------------------------------------------------------------------
 # 1. Define your image — lightweight, no GPU needed for API calls
 # ---------------------------------------------------------------------------
 example_api_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install(
+    .uv_pip_install(
         "requests",
         "numpy",
         "soundfile",
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
-
 
 # ---------------------------------------------------------------------------
 # 2. Register your model
