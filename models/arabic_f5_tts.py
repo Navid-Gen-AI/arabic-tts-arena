@@ -89,6 +89,7 @@ class ArabicF5TTSModel(BaseTTSModel):
     model_id = "arabic_f5_tts"
     display_name = "Arabic F5-TTS"
     model_url = "https://huggingface.co/IbrahimSalah/Arabic-F5-TTS-v2"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

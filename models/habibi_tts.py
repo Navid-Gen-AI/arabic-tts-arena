@@ -58,6 +58,7 @@ class HabibiTTSModel(BaseTTSModel):
     model_id = "habibi_tts"
     display_name = "Habibi TTS"
     model_url = "https://github.com/SWivid/Habibi-TTS"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

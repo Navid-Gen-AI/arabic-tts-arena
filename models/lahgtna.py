@@ -133,6 +133,7 @@ class LahgtnaChatterboxModel(BaseTTSModel):
     model_id = "lahgtna"
     display_name = "Lahgtna"
     model_url = "https://huggingface.co/oddadmix/lahgtna-chatterbox-v0"
+    gpu = "T4"
     dialects = ["eg", "sa", "mo", "iq"]
 
     @modal.enter()

@@ -155,6 +155,7 @@ class ArenaService:
             mid: {
                 "name": s.name,
                 "model_url": s.model_url,
+                "gpu": s.gpu,
                 "elo": round(s.elo, 1),
                 "ci": round(s.ci, 1),
                 "wins": s.wins,
@@ -221,6 +222,7 @@ def update_leaderboard_file():
                 "model_id": s.model_id,
                 "name": s.name,
                 "model_url": s.model_url,
+                "gpu": s.gpu,
                 "elo": round(s.elo, 1),
                 "ci": round(s.ci, 1),
                 "wins": s.wins,

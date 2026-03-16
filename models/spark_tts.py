@@ -111,6 +111,7 @@ class SparkTTSModel(BaseTTSModel):
     model_id = "spark_tts"
     display_name = "Arabic Spark TTS"
     model_url = "https://huggingface.co/IbrahimSalah/Arabic-TTS-Spark"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

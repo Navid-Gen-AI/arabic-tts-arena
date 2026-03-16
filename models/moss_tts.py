@@ -44,6 +44,7 @@ class MossTTSModel(BaseTTSModel):
     model_id = "moss_tts"
     display_name = "MOSS-TTS"
     model_url = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS"
+    gpu = "A100-40GB"
 
     @modal.enter()
     def load_model(self):

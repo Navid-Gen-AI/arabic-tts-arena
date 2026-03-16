@@ -60,6 +60,7 @@ class ExampleAPIModel(BaseTTSModel):
     model_id = "example_api"                         # unique, lowercase, underscores
     display_name = "Example Company TTS"             # shown in the arena UI
     model_url = "https://example.com/tts"            # link to your model/product page
+    gpu = ""                                         # empty for API-based models (no GPU)
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()

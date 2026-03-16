@@ -67,6 +67,7 @@ class KaniTTSModel(BaseTTSModel):
     model_id = "kani_tts"
     display_name = "KaniTTS Arabic"
     model_url = "https://huggingface.co/nineninesix/kani-tts-400m-ar"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

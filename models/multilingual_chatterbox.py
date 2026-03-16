@@ -58,6 +58,7 @@ class ChatterboxModel(BaseTTSModel):
     model_id = "chatterbox"
     display_name = "Multilingual Chatterbox"
     model_url = "https://huggingface.co/ResembleAI/chatterbox"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

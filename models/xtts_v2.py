@@ -66,6 +66,7 @@ class XTTSv2Model(BaseTTSModel):
     model_id = "xtts_v2"
     display_name = "XTTS v2"
     model_url = "https://huggingface.co/tts-hub/XTTS-v2"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

@@ -69,6 +69,7 @@ class OuteTTSModel(BaseTTSModel):
     model_id = "oute_tts"
     display_name = "OuteTTS 1.0"
     model_url = "https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B"
+    gpu = "A10G"
 
     @modal.enter()
     def load_model(self):

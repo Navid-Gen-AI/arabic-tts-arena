@@ -31,11 +31,14 @@ def register_model(cls):
     Stores the Python class name (for Modal lookup), display name (for UI),
     model_url (for leaderboard links), and supported dialects.
 
-    Optional class attribute:
+    Optional class attributes:
         dialects: list[str] — dialect codes the model can synthesize.
             e.g. ["msa", "eg", "sa", "mo", "iq"].
             Empty list or absent means the model only supports MSA / has no
             dialect knob.
+        gpu: str — GPU type used for inference (e.g. "T4", "A10G", "A100-40GB").
+            Shown in the leaderboard tooltip. Empty string or absent for
+            API-based models that don't use a GPU.
     """
     model_id = getattr(cls, "model_id", None)
     if model_id is None:
@@ -43,11 +46,13 @@ def register_model(cls):
     display_name = getattr(cls, "display_name", None) or cls.__name__
     model_url = getattr(cls, "model_url", "")
     dialects = getattr(cls, "dialects", [])
+    gpu = getattr(cls, "gpu", "")
     MODEL_REGISTRY[model_id] = {
         "class_name": cls.__name__,
         "display_name": display_name,
         "model_url": model_url,
         "dialects": list(dialects),
+        "gpu": gpu,
     }
     return cls
 

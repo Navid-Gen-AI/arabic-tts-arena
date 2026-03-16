@@ -70,6 +70,7 @@ class SpeechT5ArabicModel(BaseTTSModel):
     model_id = "speecht5_ar"
     display_name = "SpeechT5 Arabic"
     model_url = "https://huggingface.co/MBZUAI/speecht5_tts_clartts_ar"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):

@@ -42,6 +42,7 @@ class FishSpeechModel(BaseTTSModel):
     model_id = "fish_speech"
     display_name = "Fish Speech S1-mini"
     model_url = "https://huggingface.co/fishaudio/s1-mini"
+    gpu = "T4"
 
     @modal.enter()
     def load_model(self):
