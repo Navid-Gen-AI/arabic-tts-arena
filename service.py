@@ -20,7 +20,7 @@ from elo import compute_leaderboard
 # Probability of returning cached audio when a cache hit exists.
 # Set < 1.0 so a fraction of requests still trigger fresh synthesis
 # for variety (models use stochastic sampling).
-CACHE_HIT_RATE = 0.7
+CACHE_HIT_RATE = 0.85
 
 
 # =============================================================================

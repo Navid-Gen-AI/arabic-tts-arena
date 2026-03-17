@@ -25,7 +25,7 @@ import modal
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 APP_NAME = "arabic-tts-arena"
-TEST_TEXT = "الصبر مفتاح الفرج"  # short Arabic phrase — fast to synthesize
+TEST_TEXT = "السلام عليكم ورحمة الله وبركاته"  # short Arabic phrase — fast to synthesize
 TIMEOUT_SECONDS = 180  # hard cap per model (includes cold start + inference)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "smoke_test_outputs")
 
