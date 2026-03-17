@@ -7,9 +7,6 @@ from app import app, LOCAL_MODULES
 # windowing, and DAC codec decoding internally.
 # Ref: https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B
 
-# Arabic reference audio for speaker profile
-_REF_AUDIO_REPO = "IbrahimSalah/Arabic-TTS-Spark"
-
 oute_tts_image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.8.0-devel-ubuntu24.04",

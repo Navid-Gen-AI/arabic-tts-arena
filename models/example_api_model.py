@@ -10,6 +10,7 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 2. Edit the class below with your API details.
 3. Open a PR with your model file.
 4. After the PR is merged, DM the maintainer of the repo your API credentials.
+    > modal secret create example-company-tts API_KEY=<your_api_key> API_URL=<your_api_url>
    Your keys are stored in an encrypted vault (never in git).
 
 === That's it. ===

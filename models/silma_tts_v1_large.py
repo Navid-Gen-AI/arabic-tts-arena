@@ -3,10 +3,7 @@ import os
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# ---------------------------------------------------------------------------
-# 1. Define your image — lightweight, no GPU needed for API calls
-# ---------------------------------------------------------------------------
-silma_tts_pro_msa_large_api_image = (
+silma_tts_large_v1_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install(
         "requests",
@@ -15,13 +12,9 @@ silma_tts_pro_msa_large_api_image = (
 )
 
 
-# ---------------------------------------------------------------------------
-# 2. Register your model
-# ---------------------------------------------------------------------------
-
 @register_model
 @app.cls(
-    image=silma_tts_pro_msa_large_api_image,
+    image=silma_tts_large_v1_image,
     scaledown_window=300,
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
