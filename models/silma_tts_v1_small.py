@@ -15,6 +15,19 @@ silma_tts_v1_small_image = (
         "silma-tts",
         "cached-path"
     )
+    # Pre-download model weights and reference audio so they're baked into the image
+    .run_commands(
+        "python3 -c \""
+        "from silma_tts.api import SilmaTTS; "
+        "SilmaTTS()"
+        "\"",
+    )
+    .run_commands(
+        "python3 -c \""
+        "from cached_path import cached_path; "
+        "cached_path('https://github.com/SILMA-AI/silma-tts/raw/refs/heads/main/src/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav')"
+        "\"",
+    )
     .add_local_python_source(*LOCAL_MODULES)
 )
 

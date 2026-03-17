@@ -40,6 +40,21 @@ chatterbox_image = (
         f"git clone {CHATTERBOX_MTL_REPO} /opt/chatterbox-mtl",
         "cp -r /opt/chatterbox-mtl/src/chatterbox /usr/local/lib/python3.12/site-packages/chatterbox",
     )
+    # Pre-download model weights and Arabic voice prompt so they're baked into the image
+    .run_commands(
+        "python3 -c \""
+        "from chatterbox.mtl_tts import ChatterboxMultilingualTTS; "
+        "ChatterboxMultilingualTTS.from_pretrained(device='cuda')"
+        "\"",
+        secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
+        gpu="T4",
+    )
+    .run_commands(
+        f"python3 -c \""
+        f"import urllib.request; "
+        f"urllib.request.urlretrieve('{AR_VOICE_PROMPT_URL}', '/root/ar_voice_prompt.flac')"
+        f"\"",
+    )
     .add_local_python_source(*LOCAL_MODULES)
 )
 
@@ -63,16 +78,13 @@ class ChatterboxModel(BaseTTSModel):
     @modal.enter()
     def load_model(self):
         """Load the Chatterbox Multilingual TTS model when container starts."""
-        import urllib.request
-        import tempfile
         from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
         self.model = ChatterboxMultilingualTTS.from_pretrained(device="cuda")
         self.sample_rate = self.model.sr
 
-        # Download the default Arabic voice prompt so we always have a reference
-        self._ar_prompt_path = tempfile.NamedTemporaryFile(suffix=".flac", delete=False).name
-        urllib.request.urlretrieve(AR_VOICE_PROMPT_URL, self._ar_prompt_path)
+        # Use the pre-downloaded Arabic voice prompt (baked into the image)
+        self._ar_prompt_path = "/root/ar_voice_prompt.flac"
 
         print(f"✅ Chatterbox Multilingual loaded on CUDA (sr={self.sample_rate})")
 

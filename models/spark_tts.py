@@ -89,6 +89,15 @@ spark_tts_image = (
         "\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
+    # Pre-download the main Spark TTS model & processor so they're baked into the image
+    .run_commands(
+        "python3 -c \""
+        "from transformers import AutoModel, AutoProcessor; "
+        "AutoProcessor.from_pretrained('IbrahimSalah/Arabic-TTS-Spark', trust_remote_code=True); "
+        "AutoModel.from_pretrained('IbrahimSalah/Arabic-TTS-Spark', trust_remote_code=True)"
+        "\"",
+        secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
+    )
     .add_local_python_source(*LOCAL_MODULES)
 )
 

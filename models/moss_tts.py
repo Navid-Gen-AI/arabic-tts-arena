@@ -22,6 +22,16 @@ moss_tts_image = (
         "tiktoken==0.12.0",
         "tqdm==4.67.1",
     )
+    # Pre-download model & processor weights so they're baked into the image
+    .run_commands(
+        "python3 -c \""
+        "from transformers import AutoModel, AutoProcessor; "
+        "AutoModel.from_pretrained('OpenMOSS-Team/MOSS-TTS', trust_remote_code=True); "
+        "AutoProcessor.from_pretrained('OpenMOSS-Team/MOSS-TTS', trust_remote_code=True)"
+        "\"",
+        secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
+        gpu="A100-40GB",
+    )
     .add_local_python_source(*LOCAL_MODULES)
 )
 
