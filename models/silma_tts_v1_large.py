@@ -1,37 +1,17 @@
-"""
-Example: How to add a closed-source / API-based TTS model to the arena.
-
-This file is a template for companies that want to add their proprietary
-TTS model via an API. Copy this file, rename it, and adapt it.
-
-=== Setup ===
-
-1. Copy this file:     cp example_api_model.py  your_company_tts.py
-2. Edit the class below with your API details.
-3. Open a PR with your model file.
-4. After the PR is merged, DM the maintainer of the repo your API
-   credentials. They will run ONE command to store them securely:
-
-       modal secret create example-company-tts API_KEY=sk-xxx API_URL=https://...
-
-   Your keys are stored in Modal's encrypted vault — never in git.
-
-=== That's it. ===
-"""
-
 import modal
 import os
 from models import BaseTTSModel, register_model
-from app import app
+from app import app, LOCAL_MODULES
 
 # ---------------------------------------------------------------------------
 # 1. Define your image — lightweight, no GPU needed for API calls
 # ---------------------------------------------------------------------------
 silma_tts_pro_msa_large_api_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .pip_install(
+    .uv_pip_install(
         "requests",
     )
+    .add_local_python_source(*LOCAL_MODULES)
 )
 
 
@@ -42,20 +22,18 @@ silma_tts_pro_msa_large_api_image = (
 @register_model
 @app.cls(
     image=silma_tts_pro_msa_large_api_image,
-    # No GPU needed — we're just calling an API
     scaledown_window=300,
-    # ⬇️ This is your Modal secret name — must match what the maintainer creates
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
 
-class SILMATTS_APIModel(BaseTTSModel):
+class SilmaLargeTTSModel(BaseTTSModel):
     """
     SILMA TTS — API-based Arabic text-to-speech.
 
     """
 
     # ── Required class attributes ──────────────────────────────────────────
-    model_id = "silma_tts_pro_msa_large"                         # unique, lowercase, underscores
+    model_id = "silma_tts_v1_large"            # unique, lowercase, underscores
     display_name = "SILMA TTS v1 Large"             # shown in the arena UI
     model_url = "https://silma.ai/arabic-tts-models"            # link to your model/product page
     gpu = ""                                         # empty for API-based models (no GPU)

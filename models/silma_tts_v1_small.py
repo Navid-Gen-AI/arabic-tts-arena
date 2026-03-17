@@ -13,7 +13,7 @@ silma_tts_v1_small_image = (
     .apt_install("ffmpeg", "libsndfile1", "git", "build-essential", "clang")
     .uv_pip_install(
         "silma-tts",
-        "cached_path"
+        "cached-path"
     )
     .add_local_python_source(*LOCAL_MODULES)
 )
@@ -27,7 +27,7 @@ silma_tts_v1_small_image = (
     retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
-class SILMATTS_Model(BaseTTSModel):
+class SilmaSmallTTSModel(BaseTTSModel):
     """
     SILMA TTS v1 is a high-performance, 150M-parameter bilingual (Arabic/English) TTS model
     """
