@@ -1,7 +1,9 @@
+
 import modal
 import os
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
+import random
 
 silma_tts_large_v1_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -57,6 +59,10 @@ class SilmaLargeTTSModel(BaseTTSModel):
         import http.client
         import json
 
+        voice_id = random.choice(["Sulaiman","Salma"])
+        speed = random.choice([1.1,1.2,1.3])
+
+
         try:
             # ── Call your API ──────────────────────────────────────────────
 
@@ -65,8 +71,9 @@ class SilmaLargeTTSModel(BaseTTSModel):
             payload = {
                         "model_id": "silma-tts-pro-msa-large",
                         "text": text,
-                        "reference_audio_id": "Sulaiman",
-                        "nfe_steps": 16
+                        "reference_audio_id": voice_id,
+                        "nfe_steps": 16,
+                        "speaking_speed": speed,
                     }
 
             headers = {
