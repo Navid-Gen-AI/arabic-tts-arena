@@ -1,6 +1,4 @@
 import modal
-import re
-import unicodedata
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 

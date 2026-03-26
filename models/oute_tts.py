@@ -2,11 +2,6 @@ import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# OuteTTS 1.0 — Llama-based TTS with Arabic as a "High Training Data" language.
-# Uses the `outetts` pip package which handles all sampling, repetition penalty
-# windowing, and DAC codec decoding internally.
-# Ref: https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B
-
 oute_tts_image = (
     modal.Image.from_registry(
         "nvidia/cuda:12.8.0-devel-ubuntu24.04",
