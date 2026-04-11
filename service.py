@@ -9,7 +9,6 @@ from typing import Optional
 from dataclasses import asdict
 
 import random
-
 import modal
 
 from app import app, service_image, votes_volume
@@ -52,9 +51,6 @@ class ArenaService:
         With probability (1 - CACHE_HIT_RATE) a cache hit is deliberately
         skipped so users still hear varied outputs from stochastic models.
 
-        For models that support multiple dialects, a dialect is randomly
-        sampled and passed to synthesize() so users experience the full
-        quality spectrum of each model.
         """
         norm = normalize_text(text)
         cache_key = (norm, model_id)
@@ -81,16 +77,8 @@ class ArenaService:
             model_info = MODEL_REGISTRY[model_id]
             ModelCls = modal.Cls.from_name("arabic-tts-arena", model_info["class_name"])
 
-            # If the model supports dialects, randomly sample one
-            dialects = model_info.get("dialects", [])
-
             t0 = time.perf_counter()
-            if dialects:
-                dialect = random.choice(dialects)
-                print(f"🗣️ Sampling dialect '{dialect}' for {model_id}")
-                result = ModelCls().synthesize.remote(text, dialect=dialect)
-            else:
-                result = ModelCls().synthesize.remote(text)
+            result = ModelCls().synthesize.remote(text)
             latency = round(time.perf_counter() - t0, 2)
 
             if isinstance(result, dict):
@@ -213,6 +201,12 @@ def update_leaderboard_file():
     stats = compute_leaderboard(votes, MODEL_REGISTRY)
     ranked = sorted(stats.values(), key=lambda s: s.elo, reverse=True)
 
+    # Active models get ranked first; retired models (in votes but no
+    # longer in MODEL_REGISTRY) are appended at the bottom.
+    active = [s for s in ranked if s.model_id in MODEL_REGISTRY]
+    retired = [s for s in ranked if s.model_id not in MODEL_REGISTRY]
+    ordered = active + retired
+
     leaderboard_data = {
         "last_updated": datetime.now(timezone.utc).isoformat(),
         "total_votes": len(votes),
@@ -231,8 +225,10 @@ def update_leaderboard_file():
                 "battles": s.battles,
                 "win_rate": s.win_rate,
                 "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
+                "open_weight": s.open_weight,
+                "retired": s.model_id not in MODEL_REGISTRY,
             }
-            for i, s in enumerate(ranked)
+            for i, s in enumerate(ordered)
         ],
     }
 

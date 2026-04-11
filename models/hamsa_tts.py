@@ -38,6 +38,7 @@ class HamsaTTSModel(BaseTTSModel):
     display_name = "Hamsa TTS"
     model_url = "https://tryhamsa.com"
     gpu = ""  # API-based, no GPU needed
+    open_weight = False
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()

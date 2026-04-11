@@ -9,14 +9,23 @@ crashing / respawning and never returns, the test fails fast instead of
 hanging forever.
 
 Usage:
-    python scripts/smoke_test.py                         # test all models
-    python scripts/smoke_test.py chatterbox habibi_tts   # test specific models
+    python scripts/smoke_test.py                                      # test all models
+    python scripts/smoke_test.py habibi_tts lahgtna_v2                # test specific models (tab-completable)
+    python scripts/smoke_test.py habibi_tts -t "مرحبا كيف حالك"      # custom text
+    python scripts/smoke_test.py --text "أهلاً وسهلاً"               # custom text, all models
+    python scripts/smoke_test.py --timeout 300 habibi_tts             # custom timeout
+
+Tab completion (optional, one-time setup):
+    pip install argcomplete
+    activate-global-python-argcomplete          # or add: eval "$(register-python-argcomplete smoke_test.py)"
 
 Exit codes:
     0  — all models passed
     1  — one or more models failed
 """
+# PYTHON_ARGCOMPLETE_OK
 
+import argparse
 import base64
 import os
 import sys
@@ -24,29 +33,74 @@ import time
 import modal
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
+# ---------------------------------------------------------------------------
+# Import the local model registry so we can offer tab-completion choices
+# without hitting the remote Modal backend.
+# ---------------------------------------------------------------------------
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from models import MODEL_REGISTRY  # noqa: E402
+
 APP_NAME = "arabic-tts-arena"
-TEST_TEXT = "السلام عليكم ورحمة الله وبركاته"  # short Arabic phrase — fast to synthesize
+DEFAULT_TEXT = "السلام عليكم ورحمة الله وبركاته"  # short Arabic phrase — fast to synthesize
 TIMEOUT_SECONDS = 180  # hard cap per model (includes cold start + inference)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "smoke_test_outputs")
 
 
-def _call_model(class_name: str) -> dict:
+def _build_parser() -> argparse.ArgumentParser:
+    available = sorted(MODEL_REGISTRY.keys())
+    parser = argparse.ArgumentParser(
+        description="Smoke-test deployed Arabic TTS models on Modal.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Available models:\n  " + "\n  ".join(available),
+    )
+    parser.add_argument(
+        "models",
+        nargs="*",
+        choices=available,
+        default=[],
+        metavar="MODEL",
+        help="Model(s) to test (tab-completable). Omit to test all.",
+    )
+    parser.add_argument(
+        "-t", "--text",
+        default=DEFAULT_TEXT,
+        help=f"Arabic text to synthesize (default: '{DEFAULT_TEXT}')",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=TIMEOUT_SECONDS,
+        help=f"Per-model timeout in seconds (default: {TIMEOUT_SECONDS})",
+    )
+
+    # Enable argcomplete if installed (pip install argcomplete)
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
+
+    return parser
+
+
+def _call_model(class_name: str, text: str) -> dict:
     """Run the remote synthesis call (executed in a thread so we can time-out)."""
     cls = modal.Cls.from_name(APP_NAME, class_name)
-    return cls().synthesize.remote(TEST_TEXT)
+    return cls().synthesize.remote(text)
 
 
-def smoke_test_model(model_id: str, class_name: str) -> bool:
+def smoke_test_model(model_id: str, class_name: str, text: str, timeout: int) -> bool:
     """Call synthesize() on a single model with a hard timeout."""
     print(f"\n{'='*50}")
     print(f"🧪 Testing: {model_id} ({class_name})")
+    print(f"   Text: {text}")
     print(f"{'='*50}")
 
     start = time.time()
     try:
         with ThreadPoolExecutor(max_workers=1) as pool:
-            future = pool.submit(_call_model, class_name)
-            result = future.result(timeout=TIMEOUT_SECONDS)
+            future = pool.submit(_call_model, class_name, text)
+            result = future.result(timeout=timeout)
 
         elapsed = time.time() - start
 
@@ -76,7 +130,7 @@ def smoke_test_model(model_id: str, class_name: str) -> bool:
 
     except TimeoutError:
         elapsed = time.time() - start
-        print(f"  ❌ FAIL — timed out after {TIMEOUT_SECONDS}s (container may be crash-looping)")
+        print(f"  ❌ FAIL — timed out after {timeout}s (container may be crash-looping)")
         print(f"  ⏱  {elapsed:.1f}s")
         return False
 
@@ -88,38 +142,28 @@ def smoke_test_model(model_id: str, class_name: str) -> bool:
 
 
 def main():
-    # Fetch the model registry from the deployed backend
-    print("📡 Fetching model registry from Modal backend...")
-    try:
-        service = modal.Cls.from_name(APP_NAME, "ArenaService")
-        registry = service().get_model_registry.remote()
-    except Exception as e:
-        print(f"❌ Could not reach ArenaService: {e}")
-        sys.exit(1)
+    args = _build_parser().parse_args()
 
-    if not registry:
-        print("❌ Model registry is empty — nothing to test.")
-        sys.exit(1)
+    # Use the local MODEL_REGISTRY (already populated via auto-discovery)
+    registry = MODEL_REGISTRY
+    print(f"✅ Found {len(registry)} registered models: {', '.join(sorted(registry.keys()))}")
 
-    print(f"✅ Found {len(registry)} models: {', '.join(registry.keys())}")
-
-    # Filter to specific models if args provided
-    targets = sys.argv[1:]
-    if targets:
-        missing = [m for m in targets if m not in registry]
-        if missing:
-            print(f"⚠️  Unknown model(s): {', '.join(missing)}")
-        registry = {k: v for k, v in registry.items() if k in targets}
+    # Filter to requested models (argparse already validates choices)
+    if args.models:
+        registry = {k: v for k, v in registry.items() if k in args.models}
 
     if not registry:
         print("❌ No models to test.")
         sys.exit(1)
 
+    print(f"\n🔤 Text: {args.text}")
+    print(f"⏱  Timeout: {args.timeout}s per model")
+
     # Run smoke tests
     results: dict[str, bool] = {}
     for model_id, info in registry.items():
         class_name = info["class_name"]
-        passed = smoke_test_model(model_id, class_name)
+        passed = smoke_test_model(model_id, class_name, args.text, args.timeout)
         results[model_id] = passed
 
     # Summary

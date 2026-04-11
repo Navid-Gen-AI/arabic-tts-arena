@@ -29,30 +29,28 @@ def register_model(cls):
 
     The class must have `model_id` and `display_name` class attributes.
     Stores the Python class name (for Modal lookup), display name (for UI),
-    model_url (for leaderboard links), and supported dialects.
+    and model_url (for leaderboard links).
 
     Optional class attributes:
-        dialects: list[str] — dialect codes the model can synthesize.
-            e.g. ["msa", "eg", "sa", "mo", "iq"].
-            Empty list or absent means the model only supports MSA / has no
-            dialect knob.
         gpu: str — GPU type used for inference (e.g. "T4", "A10G", "A100-40GB").
             Shown in the leaderboard tooltip. Empty string or absent for
             API-based models that don't use a GPU.
+        open_weight: bool — True (default) for open-weight models, False for
+            proprietary / closed-source API models.
     """
     model_id = getattr(cls, "model_id", None)
     if model_id is None:
         raise ValueError(f"Model class {cls.__name__} must have a 'model_id' class attribute")
     display_name = getattr(cls, "display_name", None) or cls.__name__
     model_url = getattr(cls, "model_url", "")
-    dialects = getattr(cls, "dialects", [])
     gpu = getattr(cls, "gpu", "")
+    open_weight = getattr(cls, "open_weight", True)
     MODEL_REGISTRY[model_id] = {
         "class_name": cls.__name__,
         "display_name": display_name,
         "model_url": model_url,
-        "dialects": list(dialects),
         "gpu": gpu,
+        "open_weight": open_weight,
     }
     return cls
 
@@ -123,7 +121,7 @@ class BaseTTSModel:
 def _discover_models():
     """Import all .py files in models/ to trigger @register_model decorators."""
     package_dir = Path(__file__).parent
-    skip = {"__init__", "example_api_model"}  # skip base stub, example template & deprecated models
+    skip = {"__init__", "example_api_model", "lahgtna", "speecht5_ar", "oute_tts", "spark_tts", "silma_tts_v1_large"}  # skip base stub, example template & deprecated models
     for module_info in pkgutil.iter_modules([str(package_dir)]):
         if module_info.name in skip:
             continue

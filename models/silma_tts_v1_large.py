@@ -32,6 +32,7 @@ class SilmaLargeTTSModel(BaseTTSModel):
     display_name = "SILMA TTS v1 Large"             # shown in the arena UI
     model_url = "https://silma.ai/arabic-tts-models"            # link to your model/product page
     gpu = ""                                         # empty for API-based models (no GPU)
+    open_weight = False
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()

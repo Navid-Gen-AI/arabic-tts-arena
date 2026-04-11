@@ -134,7 +134,6 @@ class LahgtnaChatterboxModel(BaseTTSModel):
     display_name = "Lahgtna"
     model_url = "https://huggingface.co/oddadmix/lahgtna-chatterbox-v0"
     gpu = "T4"
-    dialects = ["eg", "sa", "mo", "iq"]
 
     @modal.enter()
     def load_model(self):
@@ -157,18 +156,14 @@ class LahgtnaChatterboxModel(BaseTTSModel):
         print(f"✅ Lahgtna Chatterbox loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
-    def synthesize(self, text: str, dialect: str = None) -> dict:
-        """Synthesize Arabic text in a specific dialect.
+    def synthesize(self, text: str) -> dict:
+        """Synthesize Arabic text in a randomly selected dialect.
 
         Args:
             text: Arabic text to synthesize.
-            dialect: One of 'eg', 'sa', 'mo', 'iq'. If None, randomly sampled.
         """
         try:
-            # Pick a dialect (random if not specified)
-            if dialect is None or dialect not in DIALECT_CONFIG:
-                dialect = random.choice(ALL_DIALECTS)
-
+            dialect = random.choice(ALL_DIALECTS)
             cfg = DIALECT_CONFIG[dialect]
             ref_audio = f"{self._ref_dir}/{cfg['audio_filename']}"
 

@@ -116,11 +116,12 @@ def _strengths_to_ratings(
 class ModelStats:
     """Bradley-Terry statistics for a single model."""
 
-    def __init__(self, model_id: str, name: str, elo: float = BASE_RATING, model_url: str = "", gpu: str = ""):
+    def __init__(self, model_id: str, name: str, elo: float = BASE_RATING, model_url: str = "", gpu: str = "", open_weight: bool = True):
         self.model_id = model_id
         self.name = name
         self.model_url = model_url
         self.gpu = gpu           # GPU type (e.g. "T4", "A10G", "A100-40GB")
+        self.open_weight = open_weight
         self.elo = elo          # field kept as "elo" for JSON/frontend compat
         self.ci = 0.0           # 95 % confidence-interval half-width (±)
         self.wins = 0
@@ -166,11 +167,13 @@ def compute_leaderboard(
             display_name = info.get("display_name", model_id)
             model_url = info.get("model_url", "")
             gpu = info.get("gpu", "")
+            open_weight = info.get("open_weight", True)
         else:
             display_name = info
             model_url = ""
             gpu = ""
-        stats[model_id] = ModelStats(model_id=model_id, name=display_name, model_url=model_url, gpu=gpu)
+            open_weight = True
+        stats[model_id] = ModelStats(model_id=model_id, name=display_name, model_url=model_url, gpu=gpu, open_weight=open_weight)
 
     # Build win matrix from votes (ties → 0.5 win each)
     win_matrix: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
