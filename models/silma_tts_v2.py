@@ -8,7 +8,7 @@ import time
 
 silma_tts_v2_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("requests", "numpy")
+    .uv_pip_install("requests", "numpy", "soundfile")
     .add_local_python_source(*LOCAL_MODULES)
 )
 
