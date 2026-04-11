@@ -3,17 +3,18 @@ import os
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 import random
-import requests
-import numpy as np
 import time
 
-persistent_session = requests.Session()
 
 silma_tts_v2_image = (
     modal.Image.debian_slim(python_version="3.12")
-    .uv_pip_install("requests", "numpy", "soundfile")
+    .uv_pip_install("requests", "numpy")
     .add_local_python_source(*LOCAL_MODULES)
 )
+
+with silma_tts_v2_image.imports():
+    import requests
+    import numpy as np
 
 
 @register_model
@@ -58,7 +59,7 @@ class SilmaV2TTSModel(BaseTTSModel):
         first_byte_received = False
 
         try:
-            with persistent_session.post(
+            with self.persistent_session.post(
                 api_url, json=payload, stream=True, headers=headers
             ) as r:
                 if r.status_code == 200:
@@ -116,7 +117,12 @@ class SilmaV2TTSModel(BaseTTSModel):
         Modal injects them automatically from the secret you specified above.
         """
         self.api_key = os.environ["API_KEY"]
-        self.api_url = "https://api.silma.ai/tts/v2/stream"  # hardcoded endpoint for streaming TTS
+        self.api_url = (
+            "https://api.silma.ai/tts/v2/stream"  # hardcoded endpoint for streaming TTS
+        )
+        self.persistent_session = (
+            requests.Session()
+        )  # reuse TCP connections for efficiency
         print(f"✅ {self.display_name} ready (endpoint: {self.api_url})")
 
     # ── Core method ────────────────────────────────────────────────────────
