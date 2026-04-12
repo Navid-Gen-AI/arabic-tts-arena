@@ -201,10 +201,9 @@ def update_leaderboard_file():
     stats = compute_leaderboard(votes, MODEL_REGISTRY)
     ranked = sorted(stats.values(), key=lambda s: s.elo, reverse=True)
 
-    # Active models get ranked first; retired models (in votes but no
-    # longer in MODEL_REGISTRY) are appended at the bottom.
-    active = [s for s in ranked if s.model_id in MODEL_REGISTRY]
-    retired = [s for s in ranked if s.model_id not in MODEL_REGISTRY]
+    # Active models ranked first; retired models appended at the bottom.
+    active = [s for s in ranked if not MODEL_REGISTRY.get(s.model_id, {}).get("retired", False)]
+    retired = [s for s in ranked if MODEL_REGISTRY.get(s.model_id, {}).get("retired", False)]
     ordered = active + retired
 
     leaderboard_data = {
@@ -226,7 +225,7 @@ def update_leaderboard_file():
                 "win_rate": s.win_rate,
                 "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
                 "open_weight": s.open_weight,
-                "retired": s.model_id not in MODEL_REGISTRY,
+                "retired": MODEL_REGISTRY.get(s.model_id, {}).get("retired", False),
             }
             for i, s in enumerate(ordered)
         ],

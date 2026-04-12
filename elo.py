@@ -179,7 +179,7 @@ def compute_leaderboard(
     win_matrix: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
 
     for vote in votes:
-        # Handle models that aren't in the current registry
+        # Handle models not in the registry (shouldn't happen normally)
         for mid in (vote.model_a, vote.model_b):
             if mid not in stats:
                 stats[mid] = ModelStats(model_id=mid, name=mid)

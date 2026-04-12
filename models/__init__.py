@@ -118,17 +118,70 @@ class BaseTTSModel:
 # Auto-discover model files
 # =============================================================================
 
+# Retired models — no longer deployed on Modal but kept for leaderboard history.
+# To retire a model: add its entry here (copy display_name, model_url, gpu,
+# open_weight from the model file). _SKIP is derived automatically.
+RETIRED_MODELS: dict[str, dict] = {
+    "lahgtna": {
+        "display_name": "Lahgtna",
+        "model_url": "https://huggingface.co/oddadmix/lahgtna-chatterbox-v0",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "speecht5_ar": {
+        "display_name": "SpeechT5 Arabic",
+        "model_url": "https://huggingface.co/MBZUAI/speecht5_tts_clartts_ar",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "oute_tts": {
+        "display_name": "OuteTTS 1.0",
+        "model_url": "https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B",
+        "gpu": "A10G",
+        "open_weight": True,
+    },
+    "spark_tts": {
+        "display_name": "Arabic Spark TTS",
+        "model_url": "https://huggingface.co/IbrahimSalah/Arabic-TTS-Spark",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "silma_tts_v1_large": {
+        "display_name": "SILMA TTS v1 Large",
+        "model_url": "https://silma.ai/arabic-tts-models",
+        "gpu": "",
+        "open_weight": False,
+    },
+}
+
+# Files to skip during auto-discovery (not real models, or retired — see above)
+_SKIP = {"__init__", "example_api_model"} | set(RETIRED_MODELS)
+
+
 def _discover_models():
     """Import all .py files in models/ to trigger @register_model decorators."""
     package_dir = Path(__file__).parent
-    skip = {"__init__", "example_api_model", "lahgtna", "speecht5_ar", "oute_tts", "spark_tts", "silma_tts_v1_large"}  # skip base stub, example template & deprecated models
     for module_info in pkgutil.iter_modules([str(package_dir)]):
-        if module_info.name in skip:
+        if module_info.name in _SKIP:
             continue
         importlib.import_module(f".{module_info.name}", __package__)
 
 
 _discover_models()
 
+# Tag active models, then merge retired models into the registry
+for _info in MODEL_REGISTRY.values():
+    _info.setdefault("retired", False)
 
-__all__ = ["MODEL_REGISTRY", "BaseTTSModel", "register_model"]
+for _mid, _meta in RETIRED_MODELS.items():
+    MODEL_REGISTRY[_mid] = {
+        "class_name": "",
+        "display_name": _meta["display_name"],
+        "model_url": _meta["model_url"],
+        "gpu": _meta["gpu"],
+        "open_weight": _meta["open_weight"],
+        "retired": True,
+    }
+
+
+__all__ = ["MODEL_REGISTRY", "RETIRED_MODELS", "BaseTTSModel", "register_model"]
