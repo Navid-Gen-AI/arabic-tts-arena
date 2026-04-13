@@ -143,19 +143,61 @@ def save_audio(session_id: str, suffix: str, audio_base64: str) -> str:
 
 
 def normalize_text(text: str) -> str:
-    """Normalize Arabic text for cache-key matching.
+    """Canonicalize text for exact cache-key matching.
 
-    1. Unicode NFC normalization
-    2. Strip leading/trailing whitespace
-    3. Collapse internal whitespace runs to a single space
-    4. Remove Arabic diacritics (tashkeel) — U+064B..U+065F, U+0670
+    Preserves diacritics and internal whitespace so distinct prompts never
+    share the same cache entry by accident.
     """
+    text = unicodedata.normalize("NFC", text)
+    return text.strip()
+
+
+def legacy_normalize_text(text: str) -> str:
+    """Return the pre-fix cache key used before exact canonical matching."""
     text = unicodedata.normalize("NFC", text)
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
-    # Remove common Arabic diacritical marks (tashkeel)
     text = re.sub(r"[\u064B-\u065F\u0670]", "", text)
     return text
+
+
+def list_vote_file_records() -> list[tuple[Path, dict, Vote]]:
+    """Return parsed vote-file records from `/data/votes`."""
+    records: list[tuple[Path, dict, Vote]] = []
+    if not VOTES_DIR.exists():
+        return records
+
+    for filepath in sorted(VOTES_DIR.glob("*.json")):
+        try:
+            with open(filepath, "r") as f:
+                data = json.loads(f.read())
+            vote = _parse_vote(data)
+            records.append((filepath, data, vote))
+        except Exception:
+            continue
+    return records
+
+
+def update_vote_file(filepath: Path | str, data: dict) -> None:
+    """Atomically rewrite a vote JSON file."""
+    filepath = Path(filepath)
+    tmp_path = filepath.with_suffix(filepath.suffix + ".tmp")
+    with open(tmp_path, "w") as f:
+        f.write(json.dumps(data, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, filepath)
+
+
+def collect_referenced_audio_paths() -> set[str]:
+    """Return all audio paths currently referenced by votes."""
+    referenced: set[str] = set()
+    for vote in load_votes():
+        if vote.audio_path_a:
+            referenced.add(vote.audio_path_a)
+        if vote.audio_path_b:
+            referenced.add(vote.audio_path_b)
+    return referenced
 
 
 # =============================================================================
