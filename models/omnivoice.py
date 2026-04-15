@@ -68,7 +68,7 @@ omnivoice_image = (
 @app.cls(
     image=omnivoice_image,
     gpu="A10G",
-    scaledown_window=300,
+    scaledown_window=60,
     retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )

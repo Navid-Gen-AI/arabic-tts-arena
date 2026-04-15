@@ -20,7 +20,7 @@ with silma_tts_v2_image.imports():
 @register_model
 @app.cls(
     image=silma_tts_v2_image,
-    scaledown_window=300,
+    scaledown_window=60,
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
 class SilmaV2TTSModel(BaseTTSModel):

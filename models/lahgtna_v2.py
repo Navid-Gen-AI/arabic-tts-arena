@@ -230,7 +230,7 @@ class DialectRouter:
 @app.cls(
     image=lahgtna_v2_image,
     gpu="T4",
-    scaledown_window=300,
+    scaledown_window=120,
     retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )

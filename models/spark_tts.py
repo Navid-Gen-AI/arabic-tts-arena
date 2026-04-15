@@ -106,7 +106,7 @@ spark_tts_image = (
 @app.cls(
     image=spark_tts_image,
     gpu="T4",
-    scaledown_window=300,
+    scaledown_window=120,
     retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )

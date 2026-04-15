@@ -17,7 +17,7 @@ silma_tts_large_v1_image = (
 @register_model
 @app.cls(
     image=silma_tts_large_v1_image,
-    scaledown_window=300,
+    scaledown_window=60,
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
 

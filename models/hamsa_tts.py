@@ -22,7 +22,7 @@ hamsa_tts_image = (
 @register_model
 @app.cls(
     image=hamsa_tts_image,
-    scaledown_window=300,
+    scaledown_window=60,
     secrets=[modal.Secret.from_name("hamsa-tts-credentials")],
 )
 class HamsaTTSModel(BaseTTSModel):

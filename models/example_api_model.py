@@ -41,7 +41,7 @@ example_api_image = (
 @app.cls(
     image=example_api_image,
     # No GPU needed — we're just calling an API
-    scaledown_window=300,
+    scaledown_window=60,
     # ⬇️ This is your Modal secret name — must match what the maintainer creates
     secrets=[modal.Secret.from_name("example-company-tts")],
 )
