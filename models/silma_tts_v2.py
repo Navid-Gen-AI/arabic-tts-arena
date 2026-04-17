@@ -137,8 +137,8 @@ class SilmaV2TTSModel(BaseTTSModel):
         """
 
         voice_id = random.choice(["sarah", "salma", "saja", "sultan", "salim"])
-        speed = random.choice([0.4, 0.5, 0.6])
-        creativity = random.choice([0.2, 0.3, 0.4, 0.5])
+        speed = random.choice([0.4])
+        creativity = random.choice([0.3, 0.4])
 
         try:
             # ── Call your API ──────────────────────────────────────────────
