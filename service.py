@@ -28,7 +28,7 @@ from elo import compute_leaderboard
 # variants N for the (text, model) pair:
 #     p_hit(N) = CACHE_HIT_P_MAX * (1 - (1 - CACHE_HIT_P0) ** N)
 #
-# This self-balances the system:
+# For example, with CACHE_HIT_P_MAX=0.9 and CACHE_HIT_P0=0.4:
 #   • N=0 → 0.00  (must synthesize)
 #   • N=1 → 0.36  (still mostly synthesize → grow the variant pool;
 #                  also avoids serving the only possible audio, which
@@ -200,6 +200,8 @@ class ArenaService:
                 "battles": s.battles,
                 "win_rate": s.win_rate,
                 "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
+                "rank_lo": s.rank_lo,
+                "rank_hi": s.rank_hi,
             }
             for mid, s in stats.items()
         }
@@ -278,6 +280,8 @@ def update_leaderboard_file():
                 "avg_latency": round(s.avg_latency, 1) if s.avg_latency is not None else None,
                 "open_weight": s.open_weight,
                 "retired": MODEL_REGISTRY.get(s.model_id, {}).get("retired", False),
+                "rank_lo": s.rank_lo,
+                "rank_hi": s.rank_hi,
             }
             for i, s in enumerate(ordered)
         ],

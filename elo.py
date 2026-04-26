@@ -124,6 +124,8 @@ class ModelStats:
         self.open_weight = open_weight
         self.elo = elo          # field kept as "elo" for JSON/frontend compat
         self.ci = 0.0           # 95 % confidence-interval half-width (±)
+        self.rank_lo: int | None = None   # 95 % bootstrap rank spread (best)
+        self.rank_hi: int | None = None   # 95 % bootstrap rank spread (worst)
         self.wins = 0
         self.losses = 0
         self.ties = 0
@@ -249,12 +251,43 @@ def compute_leaderboard(
             for mid in b_ids:
                 bootstrap_ratings[mid].append(b_ratings[mid])
 
+        # Determine which models are non-retired for rank computation
+        non_retired_ids = {
+            mid for mid in registered_models
+            if not (
+                isinstance(registered_models[mid], dict)
+                and registered_models[mid].get("retired", False)
+            )
+        }
+
+        # Collect per-round ranks (only among non-retired models)
+        bootstrap_ranks: dict[str, list[int]] = defaultdict(list)
+
         for mid, samples in bootstrap_ratings.items():
             if mid in stats and len(samples) >= 10:
                 samples.sort()
                 lo = samples[int(len(samples) * 0.025)]
                 hi = samples[int(len(samples) * 0.975)]
                 stats[mid].ci = (hi - lo) / 2.0
+
+        # Re-run ranking per bootstrap round from the already-collected ratings
+        # We stored per-model rating lists; reconstruct per-round rankings.
+        for round_idx in range(_BOOTSTRAP_ROUNDS):
+            # Gather ratings for this round (only models present in that sample)
+            round_ratings: dict[str, float] = {}
+            for mid, rating_list in bootstrap_ratings.items():
+                if round_idx < len(rating_list) and mid in non_retired_ids:
+                    round_ratings[mid] = rating_list[round_idx]
+            # Rank them
+            ranked = sorted(round_ratings, key=lambda m: round_ratings[m], reverse=True)
+            for rank, mid in enumerate(ranked, 1):
+                bootstrap_ranks[mid].append(rank)
+
+        for mid, rank_samples in bootstrap_ranks.items():
+            if mid in stats and len(rank_samples) >= 10:
+                rank_samples.sort()
+                stats[mid].rank_lo = rank_samples[int(len(rank_samples) * 0.025)]
+                stats[mid].rank_hi = rank_samples[int(len(rank_samples) * 0.975)]
 
     # Models with zero battles keep the default BASE_RATING (ci stays 0)
 
