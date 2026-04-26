@@ -24,7 +24,7 @@ BASE_RATING = 1000.0          # starting / anchor rating
 _SCALE = 400.0                # Elo-style scale factor (log-base-10)
 _BT_MAX_ITER = 200            # max Newton iterations for BT fit
 _BT_TOL = 1e-6                # convergence tolerance
-_BOOTSTRAP_ROUNDS = 200       # resamples for 95 % confidence interval
+_BOOTSTRAP_ROUNDS = 1000      # resamples for 95 % confidence interval
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +233,17 @@ def compute_leaderboard(
         rng = _random.Random(42)          # deterministic seed
         bootstrap_ratings: dict[str, list[float]] = defaultdict(list)
 
+        # Determine which models are non-retired for rank computation
+        non_retired_ids = {
+            mid for mid in registered_models
+            if not (
+                isinstance(registered_models[mid], dict)
+                and registered_models[mid].get("retired", False)
+            )
+        }
+
+        bootstrap_ranks: dict[str, list[int]] = defaultdict(list)
+
         for _ in range(_BOOTSTRAP_ROUNDS):
             sample = rng.choices(vote_tuples, k=len(vote_tuples))
 
@@ -251,38 +262,21 @@ def compute_leaderboard(
             for mid in b_ids:
                 bootstrap_ratings[mid].append(b_ratings[mid])
 
-        # Determine which models are non-retired for rank computation
-        non_retired_ids = {
-            mid for mid in registered_models
-            if not (
-                isinstance(registered_models[mid], dict)
-                and registered_models[mid].get("retired", False)
-            )
-        }
-
-        # Collect per-round ranks (only among non-retired models)
-        bootstrap_ranks: dict[str, list[int]] = defaultdict(list)
-
-        for mid, samples in bootstrap_ratings.items():
-            if mid in stats and len(samples) >= 10:
-                samples.sort()
-                lo = samples[int(len(samples) * 0.025)]
-                hi = samples[int(len(samples) * 0.975)]
-                stats[mid].ci = (hi - lo) / 2.0
-
-        # Re-run ranking per bootstrap round from the already-collected ratings
-        # We stored per-model rating lists; reconstruct per-round rankings.
-        for round_idx in range(_BOOTSTRAP_ROUNDS):
-            # Gather ratings for this round (only models present in that sample)
-            round_ratings: dict[str, float] = {}
-            for mid, rating_list in bootstrap_ratings.items():
-                if round_idx < len(rating_list) and mid in non_retired_ids:
-                    round_ratings[mid] = rating_list[round_idx]
-            # Rank them
-            ranked = sorted(round_ratings, key=lambda m: round_ratings[m], reverse=True)
+            # Compute ranks for this round (only among non-retired models)
+            active_in_round = {m: b_ratings[m] for m in b_ids if m in non_retired_ids}
+            ranked = sorted(active_in_round, key=lambda m: active_in_round[m], reverse=True)
             for rank, mid in enumerate(ranked, 1):
                 bootstrap_ranks[mid].append(rank)
 
+        # 95% CI on ratings
+        for mid, samples in bootstrap_ratings.items():
+            if mid in stats and len(samples) >= 10:
+                samples_sorted = sorted(samples)
+                lo = samples_sorted[int(len(samples_sorted) * 0.025)]
+                hi = samples_sorted[int(len(samples_sorted) * 0.975)]
+                stats[mid].ci = (hi - lo) / 2.0
+
+        # 95% CI on ranks
         for mid, rank_samples in bootstrap_ranks.items():
             if mid in stats and len(rank_samples) >= 10:
                 rank_samples.sort()
