@@ -145,77 +145,72 @@ def save_audio(session_id: str, suffix: str, audio_base64: str) -> str:
 def normalize_text(text: str) -> str:
     """Canonicalize text for exact cache-key matching.
 
-    Preserves diacritics and internal whitespace so distinct prompts never
-    share the same cache entry by accident.
+    Normalization steps:
+        - Unicode NFC normalization (e.g. combine letters + diacritics)
+        - Trim leading/trailing whitespace
+        - Collapse internal whitespace to single spaces
     """
-    text = unicodedata.normalize("NFC", text)
-    return text.strip()
-
-
-def legacy_normalize_text(text: str) -> str:
-    """Return the pre-fix cache key used before exact canonical matching."""
     text = unicodedata.normalize("NFC", text)
     text = text.strip()
     text = re.sub(r"\s+", " ", text)
-    text = re.sub(r"[\u064B-\u065F\u0670]", "", text)
     return text
 
 
-def list_vote_file_records() -> list[tuple[Path, dict, Vote]]:
-    """Return parsed vote-file records from `/data/votes`."""
-    records: list[tuple[Path, dict, Vote]] = []
-    if not VOTES_DIR.exists():
-        return records
-
-    for filepath in sorted(VOTES_DIR.glob("*.json")):
-        try:
-            with open(filepath, "r") as f:
-                data = json.loads(f.read())
-            vote = _parse_vote(data)
-            records.append((filepath, data, vote))
-        except Exception:
-            continue
-    return records
-
-
-def update_vote_file(filepath: Path | str, data: dict) -> None:
-    """Atomically rewrite a vote JSON file."""
-    filepath = Path(filepath)
-    tmp_path = filepath.with_suffix(filepath.suffix + ".tmp")
-    with open(tmp_path, "w") as f:
-        f.write(json.dumps(data, ensure_ascii=False) + "\n")
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp_path, filepath)
-
-
-def collect_referenced_audio_paths() -> set[str]:
-    """Return all audio paths currently referenced by votes."""
-    referenced: set[str] = set()
-    for vote in load_votes():
-        if vote.audio_path_a:
-            referenced.add(vote.audio_path_a)
-        if vote.audio_path_b:
-            referenced.add(vote.audio_path_b)
-    return referenced
-
-
 # =============================================================================
-# Audio cache index  —  (normalized_text, model_id) → audio_path
+# Audio cache index  —  (normalized_text, model_id) → list[audio_path]
 # =============================================================================
 
-def build_audio_cache() -> dict[tuple[str, str], str]:
-    """Scan votes.jsonl and build an in-memory lookup of cached audio.
+# Maximum number of audio variants kept per (text, model) pair in the
+# in-memory index. Older variants beyond this cap are dropped from the
+# random-selection pool (their files are NOT deleted — votes still
+# reference them) so a viral prompt can't bloat the index unbounded.
+MAX_CACHE_VARIANTS_PER_KEY = 10
 
-    Returns a dict mapping (normalized_text, model_id) → audio_path.
-    When multiple votes exist for the same key, the *last* entry wins
-    (most recent audio).
+
+def _file_size(path: str) -> Optional[int]:
+    """Return file size in bytes, or None if unreadable."""
+    try:
+        return os.path.getsize(path)
+    except OSError:
+        return None
+
+
+def _append_variant(bucket: list[str], audio_path: str) -> None:
+    """Append `audio_path` to `bucket`, dedup by file size, cap to limit.
+
+    WAV files are uncompressed PCM, so byte-identical audio always has
+    the same file size, and different audio almost never does.  This is
+    a fast O(1)-per-file metadata check (no file reads) that works
+    reliably for dedup on network-mounted volumes like Modal's.
     """
-    cache: dict[tuple[str, str], str] = {}
+    new_size = _file_size(audio_path)
+    if new_size is None:
+        return  # unreadable file, skip
+
+    for existing in bucket:
+        if _file_size(existing) == new_size:
+            return  # same size = same audio content for WAV
+
+    bucket.append(audio_path)
+    if len(bucket) > MAX_CACHE_VARIANTS_PER_KEY:
+        del bucket[: len(bucket) - MAX_CACHE_VARIANTS_PER_KEY]
+
+
+def build_audio_cache() -> dict[tuple[str, str], list[str]]:
+    """Scan all votes and build an in-memory lookup of cached audio variants.
+
+    Returns a dict mapping (normalized_text, model_id) → list[audio_path].
+    Multiple distinct audios for the same (text, model) are all retained
+    (up to MAX_CACHE_VARIANTS_PER_KEY) so the service can randomly pick
+    one at hit time, defeating byte-level fingerprinting attacks.
+    Votes are processed in timestamp order (see load_votes), so when the
+    list is trimmed the most recent variants survive.
+    """
+    cache: dict[tuple[str, str], list[str]] = {}
     for vote in load_votes():
         norm = normalize_text(vote.text)
         if vote.audio_path_a:
-            cache[(norm, vote.model_a)] = vote.audio_path_a
+            _append_variant(cache.setdefault((norm, vote.model_a), []), vote.audio_path_a)
         if vote.audio_path_b:
-            cache[(norm, vote.model_b)] = vote.audio_path_b
+            _append_variant(cache.setdefault((norm, vote.model_b), []), vote.audio_path_b)
     return cache

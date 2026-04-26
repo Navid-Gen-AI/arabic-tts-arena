@@ -4,7 +4,6 @@ import os
 import json
 import base64
 import time
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import asdict
@@ -21,24 +20,36 @@ from storage import (
     save_audio,
     normalize_text,
     build_audio_cache,
-    legacy_normalize_text,
-    list_vote_file_records,
-    update_vote_file,
-    collect_referenced_audio_paths,
-    LEGACY_VOTES_FILE,
+    _append_variant,
 )
 from elo import compute_leaderboard
 
-# Probability of returning cached audio when a cache hit exists.
-# Set < 1.0 so a fraction of requests still trigger fresh synthesis
-# for variety (models use stochastic sampling).
-CACHE_HIT_RATE = 0.85
+# Probability of returning cached audio scales with the number of stored
+# variants N for the (text, model) pair:
+#     p_hit(N) = CACHE_HIT_P_MAX * (1 - (1 - CACHE_HIT_P0) ** N)
+#
+# This self-balances the system:
+#   • N=0 → 0.00  (must synthesize)
+#   • N=1 → 0.36  (still mostly synthesize → grow the variant pool;
+#                  also avoids serving the only possible audio, which
+#                  would be a trivial fingerprint)
+#   • N=2 → 0.58
+#   • N=3 → 0.71
+#   • N=5 → 0.83
+#   • N=10 → 0.94 (cap; deep pool, safe to lean on cache & save GPU)
+#
+# Combined with random.choice over the variant list, this kills the
+# byte-fingerprint attack: identical prompts return varied audio, and
+# the more popular a prompt is, the harder it gets to game.
+CACHE_HIT_P_MAX = 0.99
+CACHE_HIT_P0 = 0.6
 
 
-def _parse_timestamp(ts: Optional[str]) -> Optional[datetime]:
-    if not ts:
-        return None
-    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+def cache_hit_probability(n_variants: int) -> float:
+    """Return the probability of serving from cache given N stored variants."""
+    if n_variants <= 0:
+        return 0.0
+    return CACHE_HIT_P_MAX * (1.0 - (1.0 - CACHE_HIT_P0) ** n_variants)
 
 
 # =============================================================================
@@ -67,29 +78,41 @@ class ArenaService:
     def synthesize_or_cache(self, text: str, model_id: str) -> dict:
         """Return cached audio when available, otherwise synthesize fresh.
 
-        With probability (1 - CACHE_HIT_RATE) a cache hit is deliberately
-        skipped so users still hear varied outputs from stochastic models.
-
+        Cache-hit probability scales with the number of stored variants
+        (see `cache_hit_probability`). On a hit, a variant is chosen
+        uniformly at random from the pool so identical prompts return
+        diverse audio across requests.
         """
         norm = normalize_text(text)
         cache_key = (norm, model_id)
 
         # --- try cache ---
-        if cache_key in self._audio_cache and random.random() < CACHE_HIT_RATE:
-            audio_path = self._audio_cache[cache_key]
-            if os.path.exists(audio_path):
-                try:
-                    with open(audio_path, "rb") as f:
-                        audio_b64 = base64.b64encode(f.read()).decode()
-                    print(f"⚡ Cache hit for ({model_id}, {norm[:40]}…)")
-                    return {
-                        "success": True,
-                        "audio_base64": audio_b64,
-                        "model_id": model_id,
-                        "cached": True,
-                    }
-                except Exception as e:
-                    print(f"⚠️ Cache read failed, falling through to synthesis: {e}")
+        variants = self._audio_cache.get(cache_key, [])
+        # Filter to variants whose files still exist on disk.
+        variants = [p for p in variants if os.path.exists(p)]
+        if len(variants) != len(self._audio_cache.get(cache_key, [])):
+            # Some files vanished (purged/cleaned); refresh the index entry.
+            if variants:
+                self._audio_cache[cache_key] = variants
+            else:
+                self._audio_cache.pop(cache_key, None)
+
+        n = len(variants)
+        if n > 0 and random.random() < cache_hit_probability(n):
+            audio_path = random.choice(variants)
+            try:
+                with open(audio_path, "rb") as f:
+                    audio_b64 = base64.b64encode(f.read()).decode()
+                print(f"⚡ Cache hit ({n} variants, p={cache_hit_probability(n):.2f}) "
+                      f"for ({model_id}, {norm[:40]}…)")
+                return {
+                    "success": True,
+                    "audio_base64": audio_b64,
+                    "model_id": model_id,
+                    "cached": True,
+                }
+            except Exception as e:
+                print(f"⚠️ Cache read failed, falling through to synthesis: {e}")
 
         # --- cache miss → call the model ---
         try:
@@ -142,12 +165,18 @@ class ArenaService:
             append_vote(vote)
             votes_volume.commit()
 
-            # Update in-memory cache so subsequent requests benefit immediately
+            # Update in-memory cache so subsequent requests benefit immediately.
+            # Append (don't replace) — multiple variants per (text, model) are
+            # retained up to MAX_CACHE_VARIANTS_PER_KEY for diversification.
             norm = normalize_text(text)
             if audio_path_a:
-                self._audio_cache[(norm, model_a)] = audio_path_a
+                _append_variant(
+                    self._audio_cache.setdefault((norm, model_a), []), audio_path_a
+                )
             if audio_path_b:
-                self._audio_cache[(norm, model_b)] = audio_path_b
+                _append_variant(
+                    self._audio_cache.setdefault((norm, model_b), []), audio_path_b
+                )
 
             return {"success": True}
         except Exception as e:
@@ -204,155 +233,6 @@ class ArenaService:
             with open(audio_path, "rb") as f:
                 return base64.b64encode(f.read()).decode()
         return None
-
-    @modal.method()
-    def inspect_or_purge_suspicious_cache_entries(
-        self,
-        cutoff_timestamp: Optional[str] = None,
-        purge: bool = False,
-        purge_all_before: bool = False,
-        delete_audio_files: bool = True,
-    ) -> dict:
-        """Inspect or purge suspicious cached audio entries from vote history.
-
-        Suspicious entries are detected when multiple distinct exact prompts map
-        to the same legacy cache key for the same model. Since the pre-fix race
-        cannot be reconstructed from metadata alone, `purge_all_before=True`
-        invalidates every cached audio reference before the cutoff.
-        """
-        cutoff_dt = _parse_timestamp(cutoff_timestamp)
-        if purge_all_before and cutoff_dt is None:
-            return {
-                "success": False,
-                "error": "cutoff_timestamp is required when purge_all_before=True",
-            }
-
-        records = list_vote_file_records()
-        legacy_groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
-        scoped_entries: list[dict] = []
-        file_data_map: dict[str, dict] = {}
-
-        for filepath, data, vote in records:
-            vote_dt = _parse_timestamp(vote.timestamp)
-            if cutoff_dt is not None and vote_dt is not None and vote_dt >= cutoff_dt:
-                continue
-
-            file_key = str(filepath)
-            file_data_map[file_key] = dict(data)
-
-            for side, model_id, audio_path in (
-                ("a", vote.model_a, vote.audio_path_a),
-                ("b", vote.model_b, vote.audio_path_b),
-            ):
-                if not audio_path:
-                    continue
-                entry = {
-                    "vote_file": file_key,
-                    "side": side,
-                    "model_id": model_id,
-                    "timestamp": vote.timestamp,
-                    "text": vote.text,
-                    "canonical_text": normalize_text(vote.text),
-                    "legacy_text": legacy_normalize_text(vote.text),
-                    "audio_path": audio_path,
-                }
-                scoped_entries.append(entry)
-                legacy_groups[(entry["legacy_text"], model_id)].append(entry)
-
-        collision_groups: list[dict] = []
-        collision_entries: list[dict] = []
-        for (legacy_text, model_id), entries in legacy_groups.items():
-            canonical_texts = sorted({entry["canonical_text"] for entry in entries})
-            if len(canonical_texts) <= 1:
-                continue
-            collision_groups.append(
-                {
-                    "model_id": model_id,
-                    "legacy_text": legacy_text,
-                    "canonical_texts": canonical_texts,
-                    "entries": [
-                        {
-                            "vote_file": entry["vote_file"],
-                            "side": entry["side"],
-                            "timestamp": entry["timestamp"],
-                            "text": entry["text"],
-                            "audio_path": entry["audio_path"],
-                        }
-                        for entry in entries
-                    ],
-                }
-            )
-            collision_entries.extend(entries)
-
-        target_entries = scoped_entries if purge_all_before else collision_entries
-        unique_target_files = {entry["vote_file"] for entry in target_entries}
-        unique_target_audio = {entry["audio_path"] for entry in target_entries}
-
-        report = {
-            "success": True,
-            "purge": purge,
-            "purge_all_before": purge_all_before,
-            "cutoff_timestamp": cutoff_timestamp,
-            "legacy_vote_file_present": LEGACY_VOTES_FILE.exists(),
-            "scanned_vote_files": len(records),
-            "scanned_audio_entries": len(scoped_entries),
-            "collision_group_count": len(collision_groups),
-            "collision_entry_count": len(collision_entries),
-            "target_entry_count": len(target_entries),
-            "target_vote_file_count": len(unique_target_files),
-            "target_audio_file_count": len(unique_target_audio),
-            "collision_groups": collision_groups,
-            "warning": (
-                "Race-poisoned cache entries are not directly detectable from vote metadata; "
-                "use purge_all_before with a cutoff to invalidate all pre-fix cached audio."
-            ),
-        }
-
-        if not purge:
-            return report
-
-        updated_files: set[str] = set()
-        purged_audio_paths: set[str] = set()
-        for entry in target_entries:
-            payload = file_data_map.get(entry["vote_file"])
-            if payload is None:
-                continue
-            field_name = f"audio_path_{entry['side']}"
-            current_path = payload.get(field_name)
-            if not current_path:
-                continue
-            purged_audio_paths.add(current_path)
-            payload[field_name] = None
-            updated_files.add(entry["vote_file"])
-
-        for file_key in updated_files:
-            update_vote_file(file_key, file_data_map[file_key])
-
-        removed_audio_files: list[str] = []
-        if delete_audio_files and purged_audio_paths:
-            still_referenced = collect_referenced_audio_paths()
-            for audio_path in sorted(purged_audio_paths):
-                if audio_path in still_referenced or not os.path.exists(audio_path):
-                    continue
-                try:
-                    os.remove(audio_path)
-                    removed_audio_files.append(audio_path)
-                except OSError:
-                    continue
-
-        self._audio_cache = build_audio_cache()
-        votes_volume.commit()
-
-        report.update(
-            {
-                "updated_vote_files": sorted(updated_files),
-                "updated_vote_file_count": len(updated_files),
-                "removed_audio_files": removed_audio_files,
-                "removed_audio_file_count": len(removed_audio_files),
-                "refreshed_cache_entries": len(self._audio_cache),
-            }
-        )
-        return report
 
 
 # =============================================================================
