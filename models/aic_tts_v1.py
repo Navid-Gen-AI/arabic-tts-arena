@@ -23,7 +23,7 @@ aic_tts_image = (
 @register_model
 @app.cls(
     image=aic_tts_image,
-    scaledown_window=300,
+    scaledown_window=60,
     secrets=[modal.Secret.from_name("aic-tts-credentials")],
 )
 class AICTTSModel(BaseTTSModel):
