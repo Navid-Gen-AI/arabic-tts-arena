@@ -51,7 +51,7 @@ class AICTTSModel(BaseTTSModel):
         self.adam_tempo = 1.1
         self.sara_tempo = 1.0
 
-        print(f"✅ {self.display_name} ready (endpoint: {self.model_url})")
+        print(f"✅ {self.display_name} ready (endpoint: {self.api_url})")
 
     # ── Core method ────────────────────────────────────────────────────────
     @modal.method()
@@ -93,7 +93,9 @@ class AICTTSModel(BaseTTSModel):
 
             headers = {"Content-Type": "application/json"}
 
-            response = requests.post(self.api_url, headers=headers, data=payload)
+            # Use a new session each time to ensure thread safety and proper connection handling
+            with requests.Session() as session:
+                response = session.post(self.api_url, headers=headers, data=payload)
             print(f"API response status: {response.status_code}")
             print(f"API response body (first 500 chars): {response.text[:500]}")
             res_data = response.json()
