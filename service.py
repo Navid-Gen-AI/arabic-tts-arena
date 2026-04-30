@@ -41,8 +41,8 @@ from elo import compute_leaderboard
 # Combined with random.choice over the variant list, this kills the
 # byte-fingerprint attack: identical prompts return varied audio, and
 # the more popular a prompt is, the harder it gets to game.
-CACHE_HIT_P_MAX = 0.99
-CACHE_HIT_P0 = 0.6
+CACHE_HIT_P_MAX = 0.9
+CACHE_HIT_P0 = 0.4
 
 
 def cache_hit_probability(n_variants: int) -> float:
