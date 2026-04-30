@@ -34,6 +34,7 @@ class AICTTSModel(BaseTTSModel):
     # ── Required class attributes ──────────────────────────────────────────
     model_id = "aic_tts"
     display_name = "AIC TTS v1"
+    model_url = "https://www.aic.gov.eg/"
     gpu = ""
     open_weight = False
 
@@ -50,7 +51,7 @@ class AICTTSModel(BaseTTSModel):
         self.adam_tempo = 1.1
         self.sara_tempo = 1.0
 
-        print(f"✅ {self.display_name} ready (endpoint: {self.api_url})")
+        print(f"✅ {self.display_name} ready (endpoint: {self.model_url})")
 
     # ── Core method ────────────────────────────────────────────────────────
     @modal.method()
@@ -93,6 +94,8 @@ class AICTTSModel(BaseTTSModel):
             headers = {"Content-Type": "application/json"}
 
             response = requests.post(self.api_url, headers=headers, data=payload)
+            print(f"API response status: {response.status_code}")
+            print(f"API response body (first 500 chars): {response.text[:500]}")
             res_data = response.json()
 
             # Access the first element of the 'outputs' list, then the 'data' key
