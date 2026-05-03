@@ -29,9 +29,10 @@ fish_speech_s2_image = (
 @app.cls(
     image=fish_speech_s2_image,
     gpu="A10G",
-    scaledown_window=60,
+    scaledown_window=120,
     retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
+    timeout=600,
 )
 class FishSpeechS2Model(BaseTTSModel):
     """Fish Audio S2 Pro — next-gen multilingual TTS with Arabic support."""
