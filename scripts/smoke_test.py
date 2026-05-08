@@ -46,8 +46,16 @@ TIMEOUT_SECONDS = 180  # hard cap per model (includes cold start + inference)
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "smoke_test_outputs")
 
 
+def _active_registry() -> dict[str, dict]:
+    return {
+        model_id: info
+        for model_id, info in MODEL_REGISTRY.items()
+        if not info.get("retired", False) and info.get("class_name")
+    }
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    available = sorted(MODEL_REGISTRY.keys())
+    available = sorted(_active_registry().keys())
     parser = argparse.ArgumentParser(
         description="Smoke-test deployed Arabic TTS models on Modal.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -145,8 +153,8 @@ def main():
     args = _build_parser().parse_args()
 
     # Use the local MODEL_REGISTRY (already populated via auto-discovery)
-    registry = MODEL_REGISTRY
-    print(f"✅ Found {len(registry)} registered models: {', '.join(sorted(registry.keys()))}")
+    registry = _active_registry()
+    print(f"✅ Found {len(registry)} active models: {', '.join(sorted(registry.keys()))}")
 
     # Filter to requested models (argparse already validates choices)
     if args.models:

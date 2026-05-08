@@ -152,6 +152,36 @@ RETIRED_MODELS: dict[str, dict] = {
         "gpu": "",
         "open_weight": False,
     },
+    "moss_tts": {
+        "display_name": "MOSS-TTS",
+        "model_url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS",
+        "gpu": "A100-40GB",
+        "open_weight": True,
+    },
+    "chatterbox": {
+        "display_name": "Multilingual Chatterbox",
+        "model_url": "https://huggingface.co/ResembleAI/chatterbox",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "fish_speech": {
+        "display_name": "Fish Speech S1-mini",
+        "model_url": "https://huggingface.co/fishaudio/s1-mini",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "kani_tts": {
+        "display_name": "KaniTTS Arabic",
+        "model_url": "https://huggingface.co/nineninesix/kani-tts-400m-ar",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "lahgtna_v2": {
+        "display_name": "Lahgatna 2.0",
+        "model_url": "https://huggingface.co/oddadmix/lahgtna-chatterbox-v1",
+        "gpu": "T4",
+        "open_weight": True,
+    },
 }
 
 # Files to skip during auto-discovery (not real models, or retired — see above)
