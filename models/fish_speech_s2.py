@@ -14,6 +14,13 @@ fish_speech_s2_image = (
         # Clone repo and install in editable mode so all subpackages are available
         "git clone --depth 1 https://github.com/fishaudio/fish-speech.git /opt/fish-speech",
         "cd /opt/fish-speech && pip install -e .",
+        # descript-audiotools (transitive via descript-audio-codec) pins
+        # protobuf<3.20, which breaks Modal's injected client at startup
+        # (modal/_environments.py needs EnumTypeWrapper.ValueType, added in
+        # protobuf 3.20). fish-speech declares a protobuf>=3.20 override in
+        # [tool.uv], but `pip` ignores [tool.uv] overrides, so force a
+        # compatible protobuf here (matches fish-speech's own <6.0.0 cap).
+        "pip install --upgrade 'protobuf>=4.25.3,<6.0.0'",
     )
     .run_commands(
         "touch /opt/fish-speech/.project-root",
