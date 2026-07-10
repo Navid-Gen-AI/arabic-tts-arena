@@ -217,7 +217,7 @@ RETIRED_MODELS: dict[str, dict] = {
 }
 
 # Files to skip during auto-discovery (not real models, or retired — see above)
-_SKIP = {"__init__", "example_api_model", "chatterbox_multilingual_v3"} | set(RETIRED_MODELS)
+_SKIP = {"__init__", "example_api_model"} | set(RETIRED_MODELS)
 
 
 def _discover_models():
