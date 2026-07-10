@@ -1,13 +1,24 @@
+"""XTTS v2 — Coqui's multilingual TTS with Arabic support and voice cloning.
+
+Uses the `TTS` pip package (coqui-tts fork) for simple inference; clones a
+fixed Arabic reference voice (~6 s clip is enough for XTTS cloning).
+
+Model: https://huggingface.co/tts-hub/XTTS-v2
+"""
+
 import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# XTTS v2 — Coqui's multilingual TTS with Arabic support and voice cloning.
-# Uses the `TTS` pip package (coqui-tts fork) for simple inference.
-# Ref: https://huggingface.co/tts-hub/XTTS-v2
+XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
-# Arabic reference audio — reuse the same Spark TTS / Arabic-F5-TTS reference
-_REF_AUDIO_REPO = "IbrahimSalah/Arabic-TTS-Spark"
+# Arabic reference audio — reuse the same Spark TTS / Arabic-F5-TTS reference.
+REF_AUDIO_REPO = "IbrahimSalah/Arabic-TTS-Spark"
+REF_AUDIO_DIR = "/root/xtts-ref"
+REF_AUDIO_PATH = f"{REF_AUDIO_DIR}/reference.wav"
+
+SAMPLE_RATE = 24000  # XTTS v2 native output rate
+
 
 xtts_v2_image = (
     modal.Image.from_registry(
@@ -24,21 +35,24 @@ xtts_v2_image = (
         "coqui-tts",
         "transformers<=4.46.2",  # coqui-tts requires <=4.46.2; 5.x removed isin_mps_friendly
     )
-    # Pre-download the XTTS v2 model and Arabic reference audio
-    .env({"COQUI_TOS_AGREED": "1"})  # Auto-accept Coqui TOS for non-interactive build
+    .env({"COQUI_TOS_AGREED": "1"})  # auto-accept Coqui TOS for non-interactive build
+    # Model + Arabic reference clip. Must be `python3 -c` shell commands, not
+    # .run_function() (which imports this module in a bare build container
+    # where the local app/models sources don't exist yet). Command strings
+    # match the originally-deployed image byte-for-byte so Modal's cache
+    # reuses it.
     .run_commands(
         "python3 -c \""
         "from TTS.api import TTS; "
-        "TTS('tts_models/multilingual/multi-dataset/xtts_v2')"
+        f"TTS('{XTTS_MODEL_NAME}')"
         "\"",
-        # Download Arabic reference audio
         "python3 -c \""
         "from huggingface_hub import hf_hub_download; "
         "hf_hub_download("
-        "    repo_id='IbrahimSalah/Arabic-TTS-Spark',"
+        f"    repo_id='{REF_AUDIO_REPO}',"
         "    repo_type='space',"
         "    filename='reference.wav',"
-        "    local_dir='/root/xtts-ref'"
+        f"    local_dir='{REF_AUDIO_DIR}'"
         ")\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
@@ -55,13 +69,7 @@ xtts_v2_image = (
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class XTTSv2Model(BaseTTSModel):
-    """XTTS v2 — Coqui multilingual TTS with Arabic voice cloning.
-
-    Supports 17 languages including Arabic. Requires only ~6 seconds of
-    reference audio for voice cloning.
-
-    Source: https://huggingface.co/tts-hub/XTTS-v2
-    """
+    """XTTS v2 — Coqui multilingual TTS with Arabic voice cloning."""
 
     model_id = "xtts_v2"
     display_name = "XTTS v2"
@@ -70,18 +78,16 @@ class XTTSv2Model(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load XTTS v2 model."""
         from TTS.api import TTS
 
-        self.tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to("cuda")
-        self.sample_rate = 24000  # XTTS v2 native output rate
-        self._ref_audio = "/root/xtts-ref/reference.wav"
+        self.tts = TTS(XTTS_MODEL_NAME).to("cuda")
+        self.sample_rate = SAMPLE_RATE
+        self._ref_audio = REF_AUDIO_PATH
 
         print(f"✅ XTTS v2 loaded on CUDA (sr={self.sample_rate})")
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Synthesize Arabic text to speech with voice cloning."""
         try:
             import numpy as np
             import os
@@ -96,8 +102,9 @@ class XTTSv2Model(BaseTTSModel):
                 return self.error_response("Input text is empty")
 
             print(f"[xtts_v2] text: {text[:80]}")
+            import time
+            start = time.perf_counter()
 
-            # Generate speech using the TTS API
             wav = self.tts.tts(
                 text=text,
                 speaker_wav=self._ref_audio,
@@ -112,14 +119,12 @@ class XTTSv2Model(BaseTTSModel):
                 wav = wav.reshape(-1)
 
             if wav.size < 100:
-                return self.error_response(
-                    f"Audio too short: {wav.size} samples"
-                )
+                return self.error_response(f"Audio too short: {wav.size} samples")
 
-            print(f"[xtts_v2] audio: len={wav.size}, sr={self.sample_rate}")
-
-            audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
+            return self.success_response(
+                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+                inference_seconds=time.perf_counter() - start,
+            )
 
         except Exception as e:
             import traceback

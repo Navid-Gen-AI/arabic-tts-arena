@@ -98,13 +98,27 @@ class BaseTTSModel:
         buffer.seek(0)
         return base64.b64encode(buffer.read()).decode("utf-8")
 
-    def success_response(self, audio_base64: str, sample_rate: int) -> dict:
-        return {
+    def success_response(
+        self,
+        audio_base64: str,
+        sample_rate: int,
+        inference_seconds: float | None = None,
+    ) -> dict:
+        """Build a success payload.
+
+        inference_seconds is the model-measured synthesis time (excluding
+        container boot / model load / network) — the arena prefers it over
+        wall time when recording leaderboard latency.
+        """
+        response = {
             "success": True,
             "audio_base64": audio_base64,
             "sample_rate": sample_rate,
             "model_id": self.model_id,
         }
+        if inference_seconds is not None:
+            response["inference_seconds"] = round(inference_seconds, 2)
+        return response
 
     def error_response(self, error: str) -> dict:
         return {
@@ -182,10 +196,28 @@ RETIRED_MODELS: dict[str, dict] = {
         "gpu": "T4",
         "open_weight": True,
     },
+    "moss_tts_nano": {
+        "display_name": "MOSS-TTS Nano",
+        "model_url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "arabic_f5_tts": {
+        "display_name": "Arabic F5-TTS",
+        "model_url": "https://huggingface.co/IbrahimSalah/Arabic-F5-TTS-v2",
+        "gpu": "T4",
+        "open_weight": True,
+    },
+    "habibi_tts": {
+        "display_name": "Habibi TTS",
+        "model_url": "https://github.com/SWivid/Habibi-TTS",
+        "gpu": "T4",
+        "open_weight": True,
+    },
 }
 
 # Files to skip during auto-discovery (not real models, or retired — see above)
-_SKIP = {"__init__", "example_api_model"} | set(RETIRED_MODELS)
+_SKIP = {"__init__", "example_api_model", "chatterbox_multilingual_v3"} | set(RETIRED_MODELS)
 
 
 def _discover_models():

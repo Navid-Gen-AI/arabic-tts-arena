@@ -1,6 +1,23 @@
+"""SILMA TTS v1 Small — 150M-parameter bilingual (Arabic/English) TTS.
+
+Uses the `silma-tts` pip package; inference clones a fixed Arabic reference
+clip shipped in the upstream repo.
+
+Model: https://huggingface.co/silma-ai/silma-tts
+"""
+
 import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
+
+# Fixed Arabic reference clip from the upstream repo, plus its transcript.
+REF_AUDIO_URL = (
+    "https://github.com/SILMA-AI/silma-tts/raw/refs/heads/main"
+    "/src/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav"
+)
+REF_TEXT = "ويدقق النظر في القرآن الكريم وسائر الكتب السماوية ويتبع مسالك الرسل العظام عليهم الصلاة والسلام."
+
+SAMPLE_RATE = 24000
 
 
 silma_tts_v1_small_image = (
@@ -13,7 +30,11 @@ silma_tts_v1_small_image = (
         "silma-tts",
         "cached-path"
     )
-    # Pre-download model weights and reference audio so they're baked into the image
+    # Weights + Arabic reference clip. Must be `python3 -c` shell commands, not
+    # .run_function() (which imports this module in a bare build container
+    # where the local app/models sources don't exist yet). Kept as two separate
+    # layers — byte-identical to the originally-deployed image so Modal reuses
+    # the cached build (a fresh SilmaTTS() warm-load can OOM the builder).
     .run_commands(
         "python3 -c \""
         "from silma_tts.api import SilmaTTS; "
@@ -23,7 +44,7 @@ silma_tts_v1_small_image = (
     .run_commands(
         "python3 -c \""
         "from cached_path import cached_path; "
-        "cached_path('https://github.com/SILMA-AI/silma-tts/raw/refs/heads/main/src/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav')"
+        f"cached_path('{REF_AUDIO_URL}')"
         "\"",
     )
     .add_local_python_source(*LOCAL_MODULES)
@@ -50,32 +71,22 @@ class SilmaSmallTTSModel(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load SILMA TTS using pip package"""
-       
         from silma_tts.api import SilmaTTS
         from cached_path import cached_path
 
-        print("Loading SILMA TTS...")
-
-        ## Load models/weights
         self.model = SilmaTTS()
-
-        url = "https://github.com/SILMA-AI/silma-tts/raw/refs/heads/main/src/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav"
-
-        self.sample_rate = 24000
-        self._ref_audio_path = cached_path(url)
-        self._ref_text = "ويدقق النظر في القرآن الكريم وسائر الكتب السماوية ويتبع مسالك الرسل العظام عليهم الصلاة والسلام."
-
+        self.sample_rate = SAMPLE_RATE
+        self._ref_audio_path = cached_path(REF_AUDIO_URL)
+        self._ref_text = REF_TEXT
 
         print(f"✅ SILMA TTS Loaded (ref_audio_path={self._ref_audio_path})")
 
-
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Synthesize Arabic text."""
-
         try:
-            
+            import time
+            start = time.perf_counter()
+
             wav, sr, spec = self.model.infer(
                 ref_file=self._ref_audio_path,
                 ref_text=self._ref_text,
@@ -84,12 +95,12 @@ class SilmaSmallTTSModel(BaseTTSModel):
                 seed=None,
                 speed=1
             )
-            
-            audio_base64 = self.audio_to_base64(wav, sr)
-            
-            return self.success_response(audio_base64, sr)
+
+            return self.success_response(
+                self.audio_to_base64(wav, sr), sr,
+                inference_seconds=time.perf_counter() - start,
+            )
 
         except Exception as e:
             import traceback
-            print(traceback.format_exc())
             return self.error_response(f"{e}\n{traceback.format_exc()}")

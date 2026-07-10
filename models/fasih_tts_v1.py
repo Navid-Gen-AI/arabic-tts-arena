@@ -1,28 +1,39 @@
+"""Fasih-TTS-V1 — Coqui XTTS v2 fine-tuned for Modern Standard Arabic (Fusha)
+with a single professional "news-anchor" male voice.
+
+Pipeline: normalize -> expand numbers -> CATT diacritization -> sacred-term
+lexicon -> chunk. Precomputed speaker-conditioning latents ship with the model,
+so no reference-audio cloning step is needed at inference time.
+
+Model:  https://huggingface.co/NightPrince/Fasih-TTS-V1
+Source: https://github.com/NightPrinceY/Fasih-TTS-V1 (front-end + serving code, MIT)
+"""
+
 import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# Fasih-TTS-V1 — Coqui XTTS v2 fine-tuned for Modern Standard Arabic (Fusha) with a
-# single professional "news-anchor" male voice. Ships with a full Arabic front-end
-# (normalize -> expand numbers -> CATT diacritization -> sacred-term lexicon -> chunk)
-# and precomputed speaker-conditioning latents, so no reference-audio cloning step is
-# needed at inference time.
-# Ref: https://huggingface.co/NightPrince/Fasih-TTS-V1
-# Source (front-end + serving code, MIT): https://github.com/NightPrinceY/Fasih-TTS-V1
+MODEL_REPO = "NightPrince/Fasih-TTS-V1"
+MODEL_DIR = "/root/model"
 
-# Pinned to a known-good commit of the upstream repo for reproducible builds.
-_FASIH_REPO = "https://github.com/NightPrinceY/Fasih-TTS-V1.git"
-_FASIH_COMMIT = "efa28e75131e4040d4b824d14e879e08a6e3b9fd"
+# Upstream repo pinned to a known-good commit for reproducible builds.
+FASIH_REPO = "https://github.com/NightPrinceY/Fasih-TTS-V1.git"
+FASIH_COMMIT = "efa28e75131e4040d4b824d14e879e08a6e3b9fd"
+FASIH_SRC_DIR = "/root/fasih_src"
 
-# CATT (github.com/abjadai/catt, MIT) diacritizer checkpoint — same one the model's
-# own `fasih_tts_server` Docker image bakes in.
-_CATT_CKPT_URL = "https://github.com/abjadai/catt/releases/download/v2/best_ed_mlm_ns_epoch_178.pt"
-_CATT_CKPT_PATH = "/root/models/catt/best_ed_mlm_ns_epoch_178.pt"
+# CATT (github.com/abjadai/catt, MIT) diacritizer checkpoint — same one the
+# model's own `fasih_tts_server` Docker image bakes in.
+CATT_CKPT_URL = "https://github.com/abjadai/catt/releases/download/v2/best_ed_mlm_ns_epoch_178.pt"
+CATT_CKPT_PATH = "/root/models/catt/best_ed_mlm_ns_epoch_178.pt"
+
+SAMPLE_RATE = 24000
+TEMPERATURE = 0.65  # matches the model's documented inference defaults
+
 
 fasih_tts_v1_image = (
-    # Same base image the author validated the model against (torch 2.3.1 / cuda 12.1) —
-    # XTTS's GPT head is fp32-only on Turing GPUs (T4/2080 Ti), so we keep the exact
-    # torch/cuda combination from `fasih_tts_server/Dockerfile` instead of a newer one.
+    # Same base image the author validated against (torch 2.3.1 / cuda 12.1) —
+    # XTTS's GPT head is fp32-only on Turing GPUs (T4/2080 Ti), so we keep the
+    # exact torch/cuda combination from `fasih_tts_server/Dockerfile`.
     modal.Image.from_registry("pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime")
     .apt_install("ffmpeg", "libsndfile1", "git", "curl")
     # Versions match `fasih_tts_server/requirements.txt` from the official repo exactly.
@@ -40,22 +51,26 @@ fasih_tts_v1_image = (
         "pyyaml>=6.0",
         "numpy<2.0",
     )
+    # Weight downloads must be `python3 -c` shell commands, not .run_function()
+    # (which imports this module in a bare build container where the local
+    # app/models sources don't exist yet). Layer structure and command strings
+    # match the originally-deployed image byte-for-byte so Modal's cache
+    # reuses it.
     .run_commands(
-        # Vendor the model's own Arabic text front-end (normalize/numbers/diacritize/
-        # chunk) and vendored CATT diacritizer — this is the same `src/tts` package
-        # `fasih_tts_server/Dockerfile` copies into its serving image.
-        f"git clone {_FASIH_REPO} /root/fasih_src "
-        f"&& cd /root/fasih_src && git checkout {_FASIH_COMMIT}",
-        # CATT diacritizer checkpoint — required so bare (non-diacritized) Arabic
-        # input is pronounced correctly, exactly like the official server.
-        f"mkdir -p /root/models/catt && curl -fsSL -o {_CATT_CKPT_PATH} {_CATT_CKPT_URL}",
-        # Model weights: config, vocab, checkpoint, and precomputed speaker-conditioning
-        # latents (gpt_cond_latent + speaker_embedding) baked in at build time.
+        # Vendor the model's own Arabic text front-end and vendored CATT
+        # diacritizer — the same `src/tts` package `fasih_tts_server/Dockerfile`
+        # copies into its serving image.
+        f"git clone {FASIH_REPO} {FASIH_SRC_DIR} "
+        f"&& cd {FASIH_SRC_DIR} && git checkout {FASIH_COMMIT}",
+        # CATT checkpoint — required so bare (non-diacritized) Arabic input is
+        # pronounced correctly, exactly like the official server.
+        f"mkdir -p /root/models/catt && curl -fsSL -o {CATT_CKPT_PATH} {CATT_CKPT_URL}",
+        # Config, vocab, checkpoint, and precomputed speaker-conditioning latents.
         "python3 -c \""
         "from huggingface_hub import snapshot_download; "
         "snapshot_download("
-        "    repo_id='NightPrince/Fasih-TTS-V1',"
-        "    local_dir='/root/model',"
+        f"    repo_id='{MODEL_REPO}',"
+        f"    local_dir='{MODEL_DIR}',"
         "    allow_patterns=['model.pth', 'config.json', 'vocab.json', 'speaker_latents.pt'],"
         ")\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
@@ -85,48 +100,46 @@ class FasihTTSV1Model(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load the fine-tuned XTTS checkpoint, speaker latents, and Arabic text pipeline."""
         import sys
         import numpy as np
         import torch
         from TTS.tts.configs.xtts_config import XttsConfig
         from TTS.tts.models.xtts import Xtts
 
-        # Make the vendored `tts` front-end package (cloned into the image above)
-        # importable, matching how the official server locates it next to itself.
-        sys.path.insert(0, "/root/fasih_src/src")
+        # Make the vendored `tts` front-end package importable, matching how
+        # the official server locates it next to itself.
+        sys.path.insert(0, f"{FASIH_SRC_DIR}/src")
         from tts.text.pipeline import TextPipeline
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.temperature = 0.65  # matches the model's documented inference defaults
-        self.sample_rate = 24000
+        self.temperature = TEMPERATURE
+        self.sample_rate = SAMPLE_RATE
 
         cfg = XttsConfig()
-        cfg.load_json("/root/model/config.json")
+        cfg.load_json(f"{MODEL_DIR}/config.json")
         self.model = Xtts.init_from_config(cfg)
         self.model.load_checkpoint(
             cfg,
-            checkpoint_path="/root/model/model.pth",
-            vocab_path="/root/model/vocab.json",
+            checkpoint_path=f"{MODEL_DIR}/model.pth",
+            vocab_path=f"{MODEL_DIR}/vocab.json",
             use_deepspeed=False,
         )
         self.model.to(self.device).eval()
 
-        # Precomputed speaker-conditioning latents ship with the model, so no
-        # reference-audio cloning step is needed at inference time.
-        latents = torch.load("/root/model/speaker_latents.pt", map_location=self.device)
+        # Precomputed speaker-conditioning latents — no reference-audio cloning.
+        latents = torch.load(f"{MODEL_DIR}/speaker_latents.pt", map_location=self.device)
         self.gpt_cond = latents["gpt_cond_latent"].to(self.device)
         self.speaker = latents["speaker_embedding"].to(self.device)
 
-        # CATT diacritizer — auto-diacritizes bare (non-diacritized) Arabic input.
-        # Loading is wrapped in try/except because the upstream TextPipeline itself
-        # falls back gracefully (no lexicon overrides) when assets are unavailable;
-        # we mirror that same "degrade, don't crash" behavior for the diacritizer.
+        # CATT loading is wrapped in try/except because the upstream
+        # TextPipeline itself falls back gracefully (no lexicon overrides) when
+        # assets are unavailable; we mirror that "degrade, don't crash"
+        # behavior for the diacritizer.
         diacritizer = None
         try:
             from tts.text.diacritize import Diacritizer
 
-            diacritizer = Diacritizer(ckpt=_CATT_CKPT_PATH, device=self.device)
+            diacritizer = Diacritizer(ckpt=CATT_CKPT_PATH, device=self.device)
         except Exception as e:
             print(f"⚠️ CATT diacritizer unavailable, falling back to raw text: {e}")
 
@@ -138,14 +151,16 @@ class FasihTTSV1Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Run the model's full Arabic front-end, then synthesize speech."""
         try:
+            import time
             import numpy as np
             import torch
 
             text = text.strip()
             if not text:
                 return self.error_response("Input text is empty")
+
+            start = time.perf_counter()
 
             # normalize -> expand numbers -> diacritize-if-needed -> sacred-term
             # lexicon -> <=160-char chunks, exactly as the official serving code.
@@ -178,7 +193,10 @@ class FasihTTSV1Model(BaseTTSModel):
             print(f"[fasih_tts_v1] audio: len={wav.size}, sr={self.sample_rate}")
 
             audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
+            return self.success_response(
+                audio_base64, self.sample_rate,
+                inference_seconds=time.perf_counter() - start,
+            )
 
         except Exception as e:
             import traceback

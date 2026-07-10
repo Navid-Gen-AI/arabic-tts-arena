@@ -1,11 +1,21 @@
+"""AIC TTS v1 — API-based Arabic TTS from Egypt's Applied Innovation Center.
+
+No local weights or GPU: synthesize() POSTs to the AIC arena inference
+endpoint (Triton-style infer payload) and decodes int16 PCM at 22.05 kHz.
+Each request randomly picks the "sara" or "adam" voice.
+
+https://www.aic.gov.eg/
+"""
+
 import modal
-import os
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# ---------------------------------------------------------------------------
-# 1. Image — lightweight, no GPU needed for API calls
-# ---------------------------------------------------------------------------
+API_URL = "https://arena.aic.gov.eg/v2/models/tts_pipeline/infer"
+SPEAKERS = ["sara", "adam"]
+TEMPO = {"adam": 1.1, "sara": 1.0}
+SAMPLE_RATE = 22050
+
 aic_tts_image = (
     modal.Image.debian_slim(python_version="3.12")
     .uv_pip_install(
@@ -17,9 +27,6 @@ aic_tts_image = (
 )
 
 
-# ---------------------------------------------------------------------------
-# 2. Register the model
-# ---------------------------------------------------------------------------
 @register_model
 @app.cls(
     image=aic_tts_image,
@@ -27,54 +34,39 @@ aic_tts_image = (
     secrets=[modal.Secret.from_name("aic-tts-credentials")],
 )
 class AICTTSModel(BaseTTSModel):
-    """
-    AIC TTS — API-based Arabic text-to-speech.
-    """
+    """AIC TTS — API-based Arabic text-to-speech."""
 
-    # ── Required class attributes ──────────────────────────────────────────
     model_id = "aic_tts"
     display_name = "AIC TTS v1"
     model_url = "https://www.aic.gov.eg/"
     gpu = ""
     open_weight = False
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()
     def load_model(self):
-        """Read API credentials from environment variables."""
+        import os
+
         self.api_token = os.environ["API_TOKEN"]
-        self.api_url = "https://arena.aic.gov.eg/v2/models/tts_pipeline/infer"
-        self.speakers = [
-            "sara",
-            "adam",
-        ]
-        self.adam_tempo = 1.1
-        self.sara_tempo = 1.0
+        print(f"✅ {self.display_name} ready (endpoint: {API_URL})")
 
-        print(f"✅ {self.display_name} ready (endpoint: {self.api_url})")
-
-    # ── Core method ────────────────────────────────────────────────────────
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Generate Arabic speech from text via the AIC TTS API."""
         import requests
         import numpy as np
         import random
         import json
 
-        speaker = random.choice(self.speakers)
+        speaker = random.choice(SPEAKERS)
 
         try:
+            import time
+            start = time.perf_counter()
+
+            # The endpoint expects its request JSON embedded as a raw string;
+            # `text` is interpolated unescaped, matching the vendor's example.
             payload_data = (
-                '{"text": "'
-                + text
-                + '", "speaker": "'
-                + speaker
-                + '", "type": "msa", "tempo": '
-                + str(self.adam_tempo if speaker == "adam" else self.sara_tempo)
-                + ', "token": "'
-                + self.api_token
-                + '"}'
+                f'{{"text": "{text}", "speaker": "{speaker}", "type": "msa", '
+                f'"tempo": {TEMPO[speaker]}, "token": "{self.api_token}"}}'
             )
 
             payload = json.dumps(
@@ -93,22 +85,24 @@ class AICTTSModel(BaseTTSModel):
 
             headers = {"Content-Type": "application/json"}
 
-            # Use a new session each time to ensure thread safety and proper connection handling
+            # New session per call for thread safety and clean connection handling.
             with requests.Session() as session:
-                response = session.post(self.api_url, headers=headers, data=payload)
+                response = session.post(API_URL, headers=headers, data=payload)
             print(f"API response status: {response.status_code}")
             print(f"API response body (first 500 chars): {response.text[:500]}")
             res_data = response.json()
 
-            # Access the first element of the 'outputs' list, then the 'data' key
             audio_samples = res_data["outputs"][0]["data"]
 
             print(f"Extracted {len(audio_samples)} audio samples. ✅")
             audio_samples = np.array(audio_samples, dtype=np.int16)
 
-            audio_base64 = self.audio_to_base64(audio_samples, 22050)
+            audio_base64 = self.audio_to_base64(audio_samples, SAMPLE_RATE)
 
-            return self.success_response(audio_base64, 22050)
+            return self.success_response(
+                audio_base64, SAMPLE_RATE,
+                inference_seconds=time.perf_counter() - start,
+            )
 
         except Exception as e:
             return self.error_response(e)

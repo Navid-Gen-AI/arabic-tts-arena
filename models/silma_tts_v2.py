@@ -1,10 +1,21 @@
+"""SILMA TTS v2 — API-based Arabic text-to-speech (SILMA cloud streaming API).
+
+The endpoint streams raw float32 PCM at 24 kHz; chunks are reassembled on
+4-byte sample boundaries before concatenation. Voice, speed, and creativity
+are sampled per request.
+
+https://silma.ai/arabic-tts-models
+"""
+
 import modal
-import os
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
-import random
-import time
 
+API_URL = "https://api.silma.ai/tts/v2/stream"
+API_MODEL_ID = "silma-tts-v2-msa"
+VOICE_IDS = ["sarah", "salma", "saja", "sultan", "salim"]
+SPEED_CHOICES = [0.4]
+CREATIVITY_CHOICES = [0.3, 0.4]
 
 silma_tts_v2_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -24,24 +35,20 @@ with silma_tts_v2_image.imports():
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
 class SilmaV2TTSModel(BaseTTSModel):
-    """
-    SILMA TTS v2 — API-based Arabic text-to-speech.
+    """SILMA TTS v2 — API-based Arabic text-to-speech."""
 
-    """
-
-    # ── Required class attributes ──────────────────────────────────────────
-    model_id = "silma_tts_v2"  # unique, lowercase, underscores
-    display_name = "SILMA TTS v2"  # shown in the arena UI
-    model_url = "https://silma.ai/arabic-tts-models"  # link to your model/product page
-    gpu = ""  # empty for API-based models (no GPU)
+    model_id = "silma_tts_v2"
+    display_name = "SILMA TTS v2"
+    model_url = "https://silma.ai/arabic-tts-models"
+    gpu = ""
     open_weight = False
     sample_rate = 24000
 
     def stream_waveform(self, text, voice_id, creativity, speed):
-        api_url = self.api_url
+        import time
 
         payload = {
-            "model_id": "silma-tts-v2-msa",
+            "model_id": API_MODEL_ID,
             "text": text,
             "creativity": creativity,
             "speed": speed,
@@ -60,10 +67,9 @@ class SilmaV2TTSModel(BaseTTSModel):
 
         try:
             with self.persistent_session.post(
-                api_url, json=payload, stream=True, headers=headers
+                API_URL, json=payload, stream=True, headers=headers
             ) as r:
                 if r.status_code == 200:
-                    # Iterate over raw bytes as they arrive from the network
                     for chunk in r.iter_content(chunk_size=None):
                         if chunk:
                             if not first_byte_received:
@@ -71,24 +77,17 @@ class SilmaV2TTSModel(BaseTTSModel):
                                 print(f"⏱️ TTFT: {ttft:.2f} ms")
                                 first_byte_received = True
 
-                            # Combine carry-over from previous chunk with new data
+                            # Network chunks can split a float32 mid-sample:
+                            # keep only whole 4-byte samples and carry the
+                            # remainder into the next chunk.
                             current_data = carry_over + chunk
-
-                            # Calculate how many full 4-byte floats we have
-                            num_floats = len(current_data) // 4
-                            cut_off = num_floats * 4
-
-                            # Separate valid bytes from the new remainder
+                            cut_off = (len(current_data) // 4) * 4
                             valid_bytes = current_data[:cut_off]
                             carry_over = current_data[cut_off:]
 
                             if valid_bytes:
-                                # Convert to waveform and yield back to the caller
-                                waveform = np.frombuffer(valid_bytes, dtype=np.float32)
+                                yield np.frombuffer(valid_bytes, dtype=np.float32)
 
-                                yield waveform
-
-                ##status code != 200
                 else:
                     print(f"Server rejected the request with status: {r.status_code}")
 
@@ -107,41 +106,25 @@ class SilmaV2TTSModel(BaseTTSModel):
             print(f"Streaming Error: {e}")
             raise Exception(f"Streaming Error {r.status_code}: {r.text}")
 
-    # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()
     def load_model(self):
-        """
-        Called once when the container starts.
+        import os
 
-        Read your API credentials from environment variables.
-        Modal injects them automatically from the secret you specified above.
-        """
         self.api_key = os.environ["API_KEY"]
-        self.api_url = (
-            "https://api.silma.ai/tts/v2/stream"  # hardcoded endpoint for streaming TTS
-        )
-        self.persistent_session = (
-            requests.Session()
-        )  # reuse TCP connections for efficiency
-        print(f"✅ {self.display_name} ready (endpoint: {self.api_url})")
+        self.persistent_session = requests.Session()  # reuse TCP connections
+        print(f"✅ {self.display_name} ready (endpoint: {API_URL})")
 
-    # ── Core method ────────────────────────────────────────────────────────
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """
-        Generate Arabic speech from text by calling your API.
+        import random
 
-        Must return:
-            self.success_response(audio_base64, sample_rate)  — on success
-            self.error_response(error)                        — on failure
-        """
-
-        voice_id = random.choice(["sarah", "salma", "saja", "sultan", "salim"])
-        speed = random.choice([0.4])
-        creativity = random.choice([0.3, 0.4])
+        voice_id = random.choice(VOICE_IDS)
+        speed = random.choice(SPEED_CHOICES)
+        creativity = random.choice(CREATIVITY_CHOICES)
 
         try:
-            # ── Call your API ──────────────────────────────────────────────
+            import time
+            start = time.perf_counter()
 
             all_audio_chunks = []
             print("Starting Streaming ...")
@@ -155,8 +138,13 @@ class SilmaV2TTSModel(BaseTTSModel):
                 audio_base64 = self.audio_to_base64(full_waveform, self.sample_rate)
 
                 if audio_base64:
-                    return self.success_response(audio_base64, self.sample_rate)
+                    return self.success_response(
+                        audio_base64, self.sample_rate,
+                        inference_seconds=time.perf_counter() - start,
+                    )
             else:
+                # `raise <dict>` is a TypeError; the except below turns it into
+                # the actual error response. Kept as-is from the original.
                 raise self.error_response("Empty audio chunks from API response.")
 
         except Exception as e:

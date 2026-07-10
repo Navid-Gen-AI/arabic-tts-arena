@@ -1,30 +1,20 @@
-"""
-VoxCPM2 — Tokenizer-Free Multilingual TTS with Voice Design
-=============================================================
+"""VoxCPM2 — OpenBMB's 2B-param tokenizer-free diffusion-AR multilingual TTS.
 
-OpenBMB's VoxCPM2: a 2B-parameter, tokenizer-free diffusion autoregressive
-TTS model supporting 30 languages (including Arabic) with 48 kHz output.
+Arabic is supported natively (no language tag needed) and output is 48 kHz
+via the built-in AudioVAE V2 super-resolution. Synthesizes from text alone,
+no reference audio required.
 
-Key features:
-    - Native Arabic support — no language tag needed
-    - Voice Design — generates a natural Arabic voice from a text description
-      alone, no reference audio required
-    - 48 kHz studio-quality output via AudioVAE V2 built-in super-resolution
-    - ~8 GB VRAM, RTF ~0.3 on RTX 4090
-
-Model:   https://huggingface.co/openbmb/VoxCPM2
-GitHub:  https://github.com/OpenBMB/VoxCPM
-Paper:   https://arxiv.org/abs/2509.24650
-License: Apache-2.0
+Model:  https://huggingface.co/openbmb/VoxCPM2
+GitHub: https://github.com/OpenBMB/VoxCPM
+Paper:  https://arxiv.org/abs/2509.24650
 """
 
 import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
 
-# ---------------------------------------------------------------------------
-# Modal image
-# ---------------------------------------------------------------------------
+MODEL_REPO = "openbmb/VoxCPM2"
+
 
 voxcpm2_image = (
     modal.Image.from_registry(
@@ -40,12 +30,17 @@ voxcpm2_image = (
         "huggingface_hub",
         "voxcpm",
     )
-    # Pre-download VoxCPM2 weights so they're baked into the image
+    # Weights baked in via a throwaway from_pretrained. Must be a `python3 -c`
+    # shell command, not .run_function() (which imports this module in a bare
+    # build container where the local app/models sources don't exist yet).
+    # Command string matches the originally-deployed image byte-for-byte so
+    # Modal's cache reuses it (a rebuild needs an A10G builder).
+    # gpu: VoxCPM.from_pretrained initializes on CUDA even with optimize=False.
     .run_commands(
         "python3 -c \""
         "from voxcpm import VoxCPM; "
         "model = VoxCPM.from_pretrained("
-        "    'openbmb/VoxCPM2',"
+        f"    '{MODEL_REPO}',"
         "    load_denoiser=False,"
         "    optimize=False,"
         "); "
@@ -58,10 +53,6 @@ voxcpm2_image = (
 )
 
 
-# ---------------------------------------------------------------------------
-# Model class
-# ---------------------------------------------------------------------------
-
 @register_model
 @app.cls(
     image=voxcpm2_image,
@@ -71,13 +62,7 @@ voxcpm2_image = (
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class VoxCPM2Model(BaseTTSModel):
-    """VoxCPM2 — OpenBMB tokenizer-free multilingual TTS (2B params).
-
-    Uses Voice Design mode to synthesize Arabic text with a natural Arabic
-    voice, avoiding the need for a reference audio clip.
-
-    Source: https://huggingface.co/openbmb/VoxCPM2
-    """
+    """VoxCPM2 — OpenBMB tokenizer-free multilingual TTS (2B params)."""
 
     model_id = "voxcpm2"
     display_name = "VoxCPM 2"
@@ -86,11 +71,10 @@ class VoxCPM2Model(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load VoxCPM2 when the container starts."""
         from voxcpm import VoxCPM
 
         self.model = VoxCPM.from_pretrained(
-            "openbmb/VoxCPM2",
+            MODEL_REPO,
             load_denoiser=False,
             optimize=False,
         )
@@ -100,16 +84,16 @@ class VoxCPM2Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Synthesize Arabic text to speech using Voice Design mode."""
         try:
+            import time
             import numpy as np
 
             text = text.strip()
             if not text:
                 return self.error_response("Input text is empty")
 
-            # Prepend the Arabic voice design description to the user's text
             print(f"[voxcpm2] text: {text[:80]}")
+            start = time.perf_counter()
 
             wav = self.model.generate(
                 text=text,
@@ -120,22 +104,16 @@ class VoxCPM2Model(BaseTTSModel):
             if not isinstance(wav, np.ndarray):
                 wav = np.array(wav, dtype=np.float32)
             wav = wav.astype(np.float32, copy=False)
-
             if wav.ndim > 1:
                 wav = wav.reshape(-1)
 
             if wav.size < 100:
-                return self.error_response(
-                    f"Audio too short: {wav.size} samples"
-                )
+                return self.error_response(f"Audio too short: {wav.size} samples")
 
-            print(
-                f"[voxcpm2] audio: len={wav.size}, sr={self.sample_rate}, "
-                f"min={wav.min():.4f}, max={wav.max():.4f}"
+            return self.success_response(
+                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+                inference_seconds=time.perf_counter() - start,
             )
-
-            audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
 
         except Exception as e:
             import traceback

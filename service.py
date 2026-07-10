@@ -121,10 +121,15 @@ class ArenaService:
 
             t0 = time.perf_counter()
             result = ModelCls().synthesize.remote(text)
-            latency = round(time.perf_counter() - t0, 2)
+            wall = round(time.perf_counter() - t0, 2)
 
             if isinstance(result, dict):
-                result["latency_seconds"] = latency
+                # Prefer the model-reported pure inference time (measured
+                # inside synthesize) so leaderboard latency excludes container
+                # cold starts, model loading, and queueing. Wall time is kept
+                # for debugging and as a fallback for models that don't report.
+                result["latency_seconds"] = result.get("inference_seconds", wall)
+                result["wall_seconds"] = wall
             return result
         except Exception as e:
             return {"success": False, "error": str(e), "model_id": model_id}

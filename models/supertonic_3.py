@@ -1,6 +1,17 @@
+"""Supertonic 3 — lightweight ONNX multilingual TTS with Arabic support.
+
+Runs on CPU via the `supertonic` pip package; uses the built-in "M4" male
+voice style.
+
+Model: https://huggingface.co/Supertone/supertonic-3
+"""
+
 import modal
 from models import BaseTTSModel, register_model
 from app import app, LOCAL_MODULES
+
+VOICE_NAME = "M4"
+
 
 supertonic_3_image = (
     modal.Image.debian_slim(python_version="3.12")
@@ -11,11 +22,16 @@ supertonic_3_image = (
         "soundfile",
         "huggingface_hub",
     )
+    # ONNX assets + M4 voice style. Must be a `python3 -c` shell command, not
+    # .run_function() (which imports this module in a bare build container
+    # where the local app/models sources don't exist yet). Command string
+    # matches the originally-deployed image byte-for-byte so Modal's cache
+    # reuses it.
     .run_commands(
         "python3 -c \""
         "from supertonic import TTS; "
         "tts = TTS(auto_download=True); "
-        "tts.get_voice_style(voice_name='M4')"
+        f"tts.get_voice_style(voice_name='{VOICE_NAME}')"
         "\"",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
@@ -41,28 +57,28 @@ class Supertonic3Model(BaseTTSModel):
 
     @modal.enter()
     def load_model(self):
-        """Load Supertonic 3 CPU runtime and a default male voice style."""
         from supertonic import TTS
 
         self.tts = TTS(auto_download=True)
-        self.voice_style = self.tts.get_voice_style(voice_name="M4")
+        self.voice_style = self.tts.get_voice_style(voice_name=VOICE_NAME)
         runtime = getattr(self.tts, "tts", None)
         self.sample_rate = int(
             getattr(self.tts, "sample_rate", None)
             or getattr(runtime, "sample_rate", 24000)
         )
-        print(f"Supertonic 3 loaded (voice=M4, lang=ar, sr={self.sample_rate})")
+        print(f"Supertonic 3 loaded (voice={VOICE_NAME}, lang=ar, sr={self.sample_rate})")
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        """Synthesize Arabic speech with Supertonic 3."""
         try:
+            import time
             import numpy as np
 
             text = text.strip()
             if not text:
                 return self.error_response("Input text is empty")
 
+            start = time.perf_counter()
             wav, _duration = self.tts.synthesize(
                 text,
                 voice_style=self.voice_style,
@@ -72,6 +88,7 @@ class Supertonic3Model(BaseTTSModel):
             duration = np.asarray(_duration).reshape(-1)
             if wav.ndim > 1:
                 wav = wav[0]
+            # Trim to the model-reported duration — raw output is padded.
             if duration.size:
                 expected_samples = int(self.sample_rate * float(duration[0]))
                 wav = wav[:expected_samples]
@@ -80,7 +97,10 @@ class Supertonic3Model(BaseTTSModel):
                 return self.error_response(f"Audio too short: {wav.size} samples")
 
             audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
+            return self.success_response(
+                audio_base64, self.sample_rate,
+                inference_seconds=time.perf_counter() - start,
+            )
 
         except Exception as e:
             import traceback
