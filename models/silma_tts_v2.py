@@ -123,9 +123,6 @@ class SilmaV2TTSModel(BaseTTSModel):
         creativity = random.choice(CREATIVITY_CHOICES)
 
         try:
-            import time
-            start = time.perf_counter()
-
             all_audio_chunks = []
             print("Starting Streaming ...")
             for audio_chunk in self.stream_waveform(text, voice_id, creativity, speed):
@@ -138,10 +135,7 @@ class SilmaV2TTSModel(BaseTTSModel):
                 audio_base64 = self.audio_to_base64(full_waveform, self.sample_rate)
 
                 if audio_base64:
-                    return self.success_response(
-                        audio_base64, self.sample_rate,
-                        inference_seconds=time.perf_counter() - start,
-                    )
+                    return self.success_response(audio_base64, self.sample_rate)
             else:
                 # `raise <dict>` is a TypeError; the except below turns it into
                 # the actual error response. Kept as-is from the original.

@@ -59,9 +59,6 @@ class AICTTSModel(BaseTTSModel):
         speaker = random.choice(SPEAKERS)
 
         try:
-            import time
-            start = time.perf_counter()
-
             # The endpoint expects its request JSON embedded as a raw string;
             # `text` is interpolated unescaped, matching the vendor's example.
             payload_data = (
@@ -99,10 +96,7 @@ class AICTTSModel(BaseTTSModel):
 
             audio_base64 = self.audio_to_base64(audio_samples, SAMPLE_RATE)
 
-            return self.success_response(
-                audio_base64, SAMPLE_RATE,
-                inference_seconds=time.perf_counter() - start,
-            )
+            return self.success_response(audio_base64, SAMPLE_RATE)
 
         except Exception as e:
             return self.error_response(e)

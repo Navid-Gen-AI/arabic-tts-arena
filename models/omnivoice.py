@@ -86,10 +86,7 @@ class OmniVoiceModel(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             from omnivoice import OmniVoiceGenerationConfig
-
-            start = time.perf_counter()
 
             print(f"[omnivoice] instruct='{VOICE_INSTRUCT}', text={text[:60]}…")
 
@@ -110,7 +107,6 @@ class OmniVoiceModel(BaseTTSModel):
 
             result = self.success_response(
                 self.audio_to_base64(wav_np, self.sample_rate), self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
             )
             result["voice_mode"] = "design"
             return result

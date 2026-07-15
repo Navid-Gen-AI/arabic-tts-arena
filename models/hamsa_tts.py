@@ -62,9 +62,6 @@ class HamsaTTSModel(BaseTTSModel):
         import random
 
         try:
-            import time
-            start = time.perf_counter()
-
             response = requests.post(
                 API_URL,
                 headers={
@@ -89,10 +86,7 @@ class HamsaTTSModel(BaseTTSModel):
                 wav_array = np.array(wav_array, dtype=np.float32)
 
             audio_base64 = self.audio_to_base64(wav_array, sample_rate)
-            return self.success_response(
-                audio_base64, sample_rate,
-                inference_seconds=time.perf_counter() - start,
-            )
+            return self.success_response(audio_base64, sample_rate)
 
         except Exception as e:
             return self.error_response(e)

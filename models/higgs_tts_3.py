@@ -118,14 +118,11 @@ class HiggsTTS3Model(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             import torch
 
             text = (text or "").strip()
             if not text:
                 return self.error_response("Input text is empty")
-
-            start = time.perf_counter()
 
             # Fixed seed keeps the sampled delivery stable across battles.
             torch.manual_seed(42)
@@ -149,7 +146,6 @@ class HiggsTTS3Model(BaseTTSModel):
 
             return self.success_response(
                 self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
             )
 
         except Exception as e:

@@ -152,15 +152,12 @@ class FasihTTSV1Model(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             import numpy as np
             import torch
 
             text = text.strip()
             if not text:
                 return self.error_response("Input text is empty")
-
-            start = time.perf_counter()
 
             # normalize -> expand numbers -> diacritize-if-needed -> sacred-term
             # lexicon -> <=160-char chunks, exactly as the official serving code.
@@ -193,10 +190,7 @@ class FasihTTSV1Model(BaseTTSModel):
             print(f"[fasih_tts_v1] audio: len={wav.size}, sr={self.sample_rate}")
 
             audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(
-                audio_base64, self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
-            )
+            return self.success_response(audio_base64, self.sample_rate)
 
         except Exception as e:
             import traceback

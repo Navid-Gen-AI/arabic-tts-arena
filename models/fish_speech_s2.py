@@ -104,11 +104,9 @@ class FishSpeechS2Model(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             import numpy as np
             from fish_speech.utils.schema import ServeTTSRequest
 
-            start = time.perf_counter()
             req = ServeTTSRequest(
                 text=text,
                 max_new_tokens=1024,
@@ -133,7 +131,6 @@ class FishSpeechS2Model(BaseTTSModel):
 
             return self.success_response(
                 self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
             )
         except Exception as e:
             return self.error_response(e)

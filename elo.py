@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random as _random
-from collections import defaultdict
+from collections import defaultdict, deque
 
 from storage import Vote
 
@@ -25,6 +25,9 @@ _SCALE = 400.0                # Elo-style scale factor (log-base-10)
 _BT_MAX_ITER = 200            # max Newton iterations for BT fit
 _BT_TOL = 1e-6                # convergence tolerance
 _BOOTSTRAP_ROUNDS = 1000      # resamples for 95 % confidence interval
+LATENCY_WINDOW = 100          # rolling window size for avg_latency (most
+                              # recent samples per model; keeps the metric
+                              # current after timing-method or infra changes)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +132,12 @@ class ModelStats:
         self.wins = 0
         self.losses = 0
         self.ties = 0
-        self._latency_samples: list[float] = []  # raw latency values for averaging
+        # Rolling window of the most recent latency samples. Votes are
+        # replayed in timestamp order (storage.load_votes sorts), so the
+        # deque naturally retains the latest LATENCY_WINDOW measurements —
+        # old samples (e.g. pre inference_seconds, wall-time with cold
+        # starts) age out instead of dragging the average forever.
+        self._latency_samples: deque[float] = deque(maxlen=LATENCY_WINDOW)
 
     @property
     def battles(self) -> int:
@@ -141,7 +149,7 @@ class ModelStats:
 
     @property
     def avg_latency(self) -> float | None:
-        """Average synthesis latency in seconds, or None if no data."""
+        """Average synthesis latency over the rolling window, or None if no data."""
         if not self._latency_samples:
             return None
         return sum(self._latency_samples) / len(self._latency_samples)

@@ -71,14 +71,12 @@ class Supertonic3Model(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             import numpy as np
 
             text = text.strip()
             if not text:
                 return self.error_response("Input text is empty")
 
-            start = time.perf_counter()
             wav, _duration = self.tts.synthesize(
                 text,
                 voice_style=self.voice_style,
@@ -97,10 +95,7 @@ class Supertonic3Model(BaseTTSModel):
                 return self.error_response(f"Audio too short: {wav.size} samples")
 
             audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(
-                audio_base64, self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
-            )
+            return self.success_response(audio_base64, self.sample_rate)
 
         except Exception as e:
             import traceback

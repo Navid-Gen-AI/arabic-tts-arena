@@ -124,7 +124,6 @@ class Nabra82MModel(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         try:
-            import time
             import numpy as np
             import torch
             from arabic_g2p import normalize_text
@@ -132,8 +131,6 @@ class Nabra82MModel(BaseTTSModel):
             text = (text or "").strip()
             if not text:
                 return self.error_response("Input text is empty")
-
-            start = time.perf_counter()
 
             # diacritize() is a no-op if the text already carries tashkeel.
             normalized, _ = normalize_text(text)
@@ -154,7 +151,6 @@ class Nabra82MModel(BaseTTSModel):
 
             return self.success_response(
                 self.audio_to_base64(wav, SAMPLE_RATE), SAMPLE_RATE,
-                inference_seconds=time.perf_counter() - start,
             )
 
         except Exception as e:

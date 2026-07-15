@@ -133,7 +133,12 @@ def smoke_test_model(model_id: str, class_name: str, text: str, timeout: int) ->
         print(f"  💾 Saved: {os.path.abspath(out_path)}")
 
         print(f"  ✅ PASS — {len(audio_b64):,} chars base64, sr={sr}")
-        print(f"  ⏱  {elapsed:.1f}s")
+        inference = result.get("inference_seconds")
+        if inference is not None:
+            overhead = elapsed - inference
+            print(f"  ⏱  inference {inference:.1f}s (+{overhead:.1f}s cold start/network = {elapsed:.1f}s total)")
+        else:
+            print(f"  ⏱  {elapsed:.1f}s total (model did not report inference_seconds)")
         return True
 
     except TimeoutError:

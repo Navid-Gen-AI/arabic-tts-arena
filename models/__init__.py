@@ -12,8 +12,10 @@ To add a new model, create models/your_model.py and use @register_model.
 
 import io
 import importlib
+import functools
 import pkgutil
 import base64
+import time
 from pathlib import Path
 
 # =============================================================================
@@ -56,6 +58,65 @@ def register_model(cls):
 
 
 # =============================================================================
+# Automatic synthesis timing
+# =============================================================================
+
+def _timed_synthesize(fn):
+    """Wrap a synthesize() implementation so successful responses carry
+    `inference_seconds` automatically. An explicit value passed by the model
+    (e.g. custom streaming measurement) is never overridden."""
+
+    @functools.wraps(fn)
+    def wrapper(self, *args, **kwargs):
+        start = time.perf_counter()
+        result = fn(self, *args, **kwargs)
+        if (
+            isinstance(result, dict)
+            and result.get("success")
+            and "inference_seconds" not in result
+        ):
+            result["inference_seconds"] = round(time.perf_counter() - start, 2)
+        return result
+
+    wrapper._auto_timed = True
+    return wrapper
+
+
+def _install_auto_timing(cls):
+    """Patch a BaseTTSModel subclass so its synthesize() is auto-timed.
+
+    Runs from BaseTTSModel.__init_subclass__, i.e. when the class body
+    finishes executing — after @modal.method() has wrapped synthesize but
+    before @app.cls / @register_model run. For a @modal.method() the real
+    function lives on the wrapper's `raw_f`, which is what Modal executes in
+    the container (this module is re-imported there, so the patch applies
+    remotely too). If Modal ever changes that internal, we degrade
+    gracefully: service.py falls back to wall-clock latency.
+    """
+    obj = cls.__dict__.get("synthesize")
+    if obj is None:
+        return
+    # Plain function (no @modal.method()) — wrap directly.
+    if not hasattr(obj, "_get_raw_f"):
+        if callable(obj) and not getattr(obj, "_auto_timed", False):
+            setattr(cls, "synthesize", _timed_synthesize(obj))
+        return
+    impl = next(
+        (v for k, v in vars(obj).items() if k.startswith("_sync_original")),
+        None,
+    )
+    raw = getattr(impl, "raw_f", None)
+    if callable(raw):
+        if not getattr(raw, "_auto_timed", False):
+            impl.raw_f = _timed_synthesize(raw)
+    else:
+        print(
+            f"⚠️ auto-timing not applied to {cls.__name__}.synthesize "
+            "(Modal internals changed?); latency falls back to wall time"
+        )
+
+
+# =============================================================================
 # Base TTS Model
 # =============================================================================
 
@@ -70,10 +131,18 @@ class BaseTTSModel:
     And implement:
         load_model()            — called once on container start (@modal.enter())
         synthesize(text) -> dict — generate audio (@modal.method())
+
+    Synthesis timing is automatic: every subclass's synthesize() is wrapped at
+    class-definition time, and successful responses gain `inference_seconds`
+    (model-side synthesis wall time) without any per-model code.
     """
 
     model_id: str = ""
     display_name: str = ""
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _install_auto_timing(cls)
 
     def load_model(self):
         raise NotImplementedError
@@ -106,9 +175,10 @@ class BaseTTSModel:
     ) -> dict:
         """Build a success payload.
 
-        inference_seconds is the model-measured synthesis time (excluding
-        container boot / model load / network) — the arena prefers it over
-        wall time when recording leaderboard latency.
+        inference_seconds is normally filled in automatically by the
+        synthesize() timing wrapper (see _timed_synthesize). Pass it
+        explicitly only when the model measures a more precise window
+        itself — an explicit value always wins.
         """
         response = {
             "success": True,

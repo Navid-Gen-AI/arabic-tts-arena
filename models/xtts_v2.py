@@ -102,8 +102,6 @@ class XTTSv2Model(BaseTTSModel):
                 return self.error_response("Input text is empty")
 
             print(f"[xtts_v2] text: {text[:80]}")
-            import time
-            start = time.perf_counter()
 
             wav = self.tts.tts(
                 text=text,
@@ -123,7 +121,6 @@ class XTTSv2Model(BaseTTSModel):
 
             return self.success_response(
                 self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-                inference_seconds=time.perf_counter() - start,
             )
 
         except Exception as e:
