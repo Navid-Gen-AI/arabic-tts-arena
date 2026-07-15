@@ -46,11 +46,14 @@ audar_tts_image = (
 @register_model
 @app.cls(
     image=audar_tts_image,
-    scaledown_window=60,
+    # Leaderboard latency is timed around the whole remote call, so container
+    # cold-starts count against us. Keep the (cheap, CPU-only) container warm
+    # a bit longer — matches the precedent set for fish_speech_s2 upstream.
+    scaledown_window=120,
     secrets=[modal.Secret.from_name("audar-tts-credentials")],
 )
 class AudarTTSModel(BaseTTSModel):
-    """Audar-TTS-V1 — Arabic-first expressive TTS (https://audarai.com)."""
+    """Audar-TTS-V1 — Arabic-first expressive TTS served via the AudarAI API."""
 
     # ── Required class attributes ──────────────────────────────────────────
     model_id = "audar_tts_v1"
@@ -68,7 +71,9 @@ class AudarTTSModel(BaseTTSModel):
         self.tts_model = os.environ.get("AUDAR_MODEL", TTS_MODEL)
         voices = os.environ.get("AUDAR_VOICE", ",".join(VOICES))
         self.voices = [v.strip() for v in voices.split(",") if v.strip()]
-        self.endpoint = f"{self.base_url}/v1/speech/audio/speech"
+        # Model selection is routed via the `provider` query parameter (the
+        # `model` field in the JSON body is ignored by the gateway).
+        self.endpoint = f"{self.base_url}/v1/speech/audio/speech?provider={self.tts_model}"
         print(
             f"✅ {self.display_name} ready "
             f"(model={self.tts_model}, voices={self.voices})"
@@ -102,11 +107,11 @@ class AudarTTSModel(BaseTTSModel):
             )
             response.raise_for_status()
 
-            # The API returns WAV bytes
+            # The API returns WAV bytes; decode to numpy + sample_rate so the
+            # BaseTTSModel helper can re-emit normalized WAV.
             wav_array, sample_rate = sf.read(io.BytesIO(response.content))
             if not isinstance(wav_array, np.ndarray):
                 wav_array = np.array(wav_array, dtype=np.float32)
-
             # Downmix to mono if the API ever returns stereo
             if wav_array.ndim > 1:
                 wav_array = wav_array.mean(axis=1)
