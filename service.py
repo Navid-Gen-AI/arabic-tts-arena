@@ -29,20 +29,24 @@ from elo import compute_leaderboard
 #     p_hit(N) = CACHE_HIT_P_MAX * (1 - (1 - CACHE_HIT_P0) ** N)
 #
 # For example, with CACHE_HIT_P_MAX=0.9 and CACHE_HIT_P0=0.4:
-#   • N=0 → 0.00  (must synthesize)
-#   • N=1 → 0.36  (still mostly synthesize → grow the variant pool;
-#                  also avoids serving the only possible audio, which
-#                  would be a trivial fingerprint)
-#   • N=2 → 0.58
-#   • N=3 → 0.71
+#   • N=3 → 0.71  (first depth at which the cache may serve at all)
 #   • N=5 → 0.83
 #   • N=10 → 0.94 (cap; deep pool, safe to lean on cache & save GPU)
 #
-# Combined with random.choice over the variant list, this kills the
-# byte-fingerprint attack: identical prompts return varied audio, and
-# the more popular a prompt is, the harder it gets to game.
+# Two guards make cached audio hard to fingerprint:
+#   • No hits below CACHE_MIN_VARIANTS — a shallow pool would replay the
+#     same clip often enough to identify the model behind it.
+#   • Session-aware serving — a browser session is never served the same
+#     variant twice for a given (text, model); once it has heard them
+#     all, the request falls through to fresh synthesis.
 CACHE_HIT_P_MAX = 0.9
 CACHE_HIT_P0 = 0.4
+CACHE_MIN_VARIANTS = 3
+
+# Cap on the (session, text, model) → served-variants map so it can't grow
+# unbounded; oldest entries are evicted first. Per-container and in-memory:
+# resets on restart, best-effort by design.
+SERVED_MAP_MAX = 50_000
 
 
 def cache_hit_probability(n_variants: int) -> float:
@@ -67,21 +71,36 @@ class ArenaService:
     @modal.enter()
     def _build_cache(self):
         """Build in-memory audio cache index from stored votes on container start."""
+        from collections import OrderedDict
+
         self._audio_cache = build_audio_cache()
+        # (session_id, norm_text, model_id) → set of variant paths already
+        # served to that session. See the cache constants for rationale.
+        self._served: "OrderedDict[tuple, set[str]]" = OrderedDict()
         print(f"✅ Audio cache loaded: {len(self._audio_cache)} entries")
+
+    def _mark_served(self, served_key: tuple, audio_path: str):
+        if served_key in self._served:
+            self._served.move_to_end(served_key)
+            self._served[served_key].add(audio_path)
+        else:
+            self._served[served_key] = {audio_path}
+            while len(self._served) > SERVED_MAP_MAX:
+                self._served.popitem(last=False)
 
     # -----------------------------------------------------------------
     # Synthesis with cache
     # -----------------------------------------------------------------
 
     @modal.method()
-    def synthesize_or_cache(self, text: str, model_id: str) -> dict:
+    def synthesize_or_cache(self, text: str, model_id: str, session_id: str | None = None) -> dict:
         """Return cached audio when available, otherwise synthesize fresh.
 
         Cache-hit probability scales with the number of stored variants
-        (see `cache_hit_probability`). On a hit, a variant is chosen
-        uniformly at random from the pool so identical prompts return
-        diverse audio across requests.
+        (see `cache_hit_probability`); pools below CACHE_MIN_VARIANTS never
+        serve from cache. When a session_id is provided, variants already
+        served to that session for this (text, model) are excluded, so a
+        user re-running the same prompt never hears a cached replay.
         """
         norm = normalize_text(text)
         cache_key = (norm, model_id)
@@ -98,13 +117,20 @@ class ArenaService:
                 self._audio_cache.pop(cache_key, None)
 
         n = len(variants)
-        if n > 0 and random.random() < cache_hit_probability(n):
-            audio_path = random.choice(variants)
+        served_key = (session_id, norm, model_id) if session_id else None
+        unserved = variants
+        if served_key and served_key in self._served:
+            unserved = [p for p in variants if p not in self._served[served_key]]
+
+        if n >= CACHE_MIN_VARIANTS and unserved and random.random() < cache_hit_probability(n):
+            audio_path = random.choice(unserved)
             try:
                 with open(audio_path, "rb") as f:
                     audio_b64 = base64.b64encode(f.read()).decode()
-                print(f"⚡ Cache hit ({n} variants, p={cache_hit_probability(n):.2f}) "
-                      f"for ({model_id}, {norm[:40]}…)")
+                if served_key:
+                    self._mark_served(served_key, audio_path)
+                print(f"⚡ Cache hit ({n} variants, {len(unserved)} unserved, "
+                      f"p={cache_hit_probability(n):.2f}) for ({model_id}, {norm[:40]}…)")
                 return {
                     "success": True,
                     "audio_base64": audio_b64,
