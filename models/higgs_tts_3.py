@@ -18,6 +18,12 @@ MODEL_REPO = "multimodalart/higgs-audio-v3-tts-4b-transformers"
 # The port runs trust_remote_code — pin so upstream pushes can't change what we execute.
 MODEL_REVISION = "30f01593ee6a12efa586c92455afe4b76e45095d"
 
+# The port's get_audio_codec() lazily pulls this separate ~800 MB codec repo
+# (config.audio_tokenizer_id) — pre-download it at build so container start
+# never downloads it. Transformers-native model, no remote code.
+CODEC_REPO = "bosonai/higgs-audio-v2-tokenizer"
+CODEC_REVISION = "403fbacf2f60caaa102f893fdfabb694619b2417"
+
 # Fixed MSA reference voice — same clip + transcript pair the Habibi TTS
 # integration used (official Habibi-TTS Space assets).
 REF_AUDIO_PATH = "/root/ref/msa_ref.wav"
@@ -51,12 +57,22 @@ higgs_tts_3_image = (
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         f"snapshot_download('{MODEL_REPO}', revision='{MODEL_REVISION}')\"",
+        # The port's remote code loads the codec by repo id (revision 'main'),
+        # so alongside the pinned snapshot we write refs/main into the cache —
+        # otherwise offline resolution of 'main' at runtime fails.
+        "python3 -c \"from huggingface_hub import snapshot_download; from pathlib import Path; "
+        f"p = Path(snapshot_download('{CODEC_REPO}', revision='{CODEC_REVISION}')); "
+        "refs = p.parents[1] / 'refs'; refs.mkdir(exist_ok=True); "
+        f"(refs / 'main').write_text('{CODEC_REVISION}')\"",
         "python3 -c \"from huggingface_hub import hf_hub_download; "
         "hf_hub_download('chenxie95/Habibi-TTS', 'assets/MSA.mp3', "
         "repo_type='space', local_dir='/root')\"",
         f"mkdir -p /root/ref && ffmpeg -i /root/assets/MSA.mp3 -ar 24000 -ac 1 {REF_AUDIO_PATH}",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
+    # Everything is baked into the image above; container start must never
+    # reach the Hub (a hung download here is a startup-timeout kill).
+    .env({"HF_HUB_OFFLINE": "1"})
     .add_local_python_source(*LOCAL_MODULES)
 )
 
@@ -84,7 +100,12 @@ class HiggsTTS3Model(BaseTTSModel):
         import torch
         from transformers import AutoModelForCausalLM, AutoTokenizer
 
-        self.tokenizer = AutoTokenizer.from_pretrained(MODEL_REPO, revision=MODEL_REVISION)
+        # trust_remote_code also here: AutoTokenizer consults the repo's custom
+        # AutoConfig, and without the flag transformers falls into an interactive
+        # [y/N] prompt that hangs a headless container until the startup timeout.
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            MODEL_REPO, revision=MODEL_REVISION, trust_remote_code=True,
+        )
         self.model = (
             AutoModelForCausalLM.from_pretrained(
                 MODEL_REPO,
