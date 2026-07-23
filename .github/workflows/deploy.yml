@@ -31,5 +31,5 @@ jobs:
         run: |
           # Stop the running app to kill any warm/stale containers,
           # so the smoke test always hits freshly-built code.
-          modal app stop arabic-tts-arena 2>/dev/null || true
+          modal app stop --yes arabic-tts-arena || true
           modal deploy app.py

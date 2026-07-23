@@ -56,7 +56,9 @@ higgs_tts_3_image = (
         # The port's remote code loads the codec by repo id (revision 'main'),
         # so alongside the pinned snapshot we write refs/main into the cache —
         # otherwise offline resolution of 'main' at runtime fails.
-        "python3 -c \"from huggingface_hub import snapshot_download; from pathlib import Path; "
+        # DISABLE_XET: this repo's safetensors reproducibly dies mid-download
+        # with a CAS "error decoding response body" — plain HTTP works.
+        "HF_HUB_DISABLE_XET=1 python3 -c \"from huggingface_hub import snapshot_download; from pathlib import Path; "
         f"p = Path(snapshot_download('{CODEC_REPO}', revision='{CODEC_REVISION}')); "
         "refs = p.parents[1] / 'refs'; refs.mkdir(exist_ok=True); "
         f"(refs / 'main').write_text('{CODEC_REVISION}')\"",
