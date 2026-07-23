@@ -24,18 +24,15 @@ MODEL_REVISION = "30f01593ee6a12efa586c92455afe4b76e45095d"
 CODEC_REPO = "bosonai/higgs-audio-v2-tokenizer"
 CODEC_REVISION = "403fbacf2f60caaa102f893fdfabb694619b2417"
 
-# Fixed MSA reference voice — same clip + transcript pair the Habibi TTS
-# integration used (official Habibi-TTS Space assets).
-REF_AUDIO_PATH = "/root/ref/msa_ref.wav"
-REF_TEXT = (
-    "كان اللعيب حاضرًا في العديد من الأنشطة والفعاليات المرتبطة بكأس العالم، "
-    "مما سمح للجماهير بالتفاعل معه والتقاط الصور التذكارية."
-)
+# Fixed MSA reference voice — the shared clip in audio-assets/ (mono 24 kHz);
+# transcript from audio-assets/metadata.json.
+REF_AUDIO_PATH = "/root/audio-assets/msa-ar.wav"
+REF_TEXT = "السلام عليكم ورحمة الله وبركاته"
 
 
 higgs_tts_3_image = (
     modal.Image.from_registry(
-        "nvidia/cuda:12.6.0-cudnn-runtime-ubuntu24.04",
+        "nvidia/cuda:12.8.0-cudnn-runtime-ubuntu24.04",
         add_python="3.12",
     )
     # build-essential: torch dispatches some eager ops to triton kernels that
@@ -50,10 +47,9 @@ higgs_tts_3_image = (
         "soundfile",
         "huggingface_hub[hf_xet]",
     )
-    # Pinned weights + reference clip resampled to mono 24 kHz WAV. Must be
-    # `python3 -c` shell commands, not .run_function() (which imports this
-    # module in a bare build container where the local app/models sources
-    # don't exist yet).
+    # Pinned weights. Must be `python3 -c` shell commands, not .run_function()
+    # (which imports this module in a bare build container where the local
+    # app/models sources don't exist yet).
     .run_commands(
         "python3 -c \"from huggingface_hub import snapshot_download; "
         f"snapshot_download('{MODEL_REPO}', revision='{MODEL_REVISION}')\"",
@@ -64,15 +60,12 @@ higgs_tts_3_image = (
         f"p = Path(snapshot_download('{CODEC_REPO}', revision='{CODEC_REVISION}')); "
         "refs = p.parents[1] / 'refs'; refs.mkdir(exist_ok=True); "
         f"(refs / 'main').write_text('{CODEC_REVISION}')\"",
-        "python3 -c \"from huggingface_hub import hf_hub_download; "
-        "hf_hub_download('chenxie95/Habibi-TTS', 'assets/MSA.mp3', "
-        "repo_type='space', local_dir='/root')\"",
-        f"mkdir -p /root/ref && ffmpeg -i /root/assets/MSA.mp3 -ar 24000 -ac 1 {REF_AUDIO_PATH}",
         secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
     )
     # Everything is baked into the image above; container start must never
     # reach the Hub (a hung download here is a startup-timeout kill).
     .env({"HF_HUB_OFFLINE": "1"})
+    .add_local_file("audio-assets/msa-ar.wav", REF_AUDIO_PATH)
     .add_local_python_source(*LOCAL_MODULES)
 )
 
