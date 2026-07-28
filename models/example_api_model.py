@@ -42,6 +42,8 @@ example_api_image = (
     image=example_api_image,
     # No GPU needed — we're just calling an API
     scaledown_window=60,
+    # No retries — a failed synthesize() should surface immediately in Modal's dashboard
+    retries=0,
     # ⬇️ This is your Modal secret name — must match what the maintainer creates
     secrets=[modal.Secret.from_name("example-company-tts")],
 )
@@ -79,57 +81,58 @@ class ExampleAPIModel(BaseTTSModel):
 
         Must return:
             self.success_response(audio_base64, sample_rate)  — on success
-            self.error_response(error)                        — on failure
+
+        On failure, RAISE an exception — do NOT catch it and return an
+        error dict. Use ValueError for bad input, RuntimeError for
+        backend/API failures. service.py catches exceptions at the call
+        site and degrades gracefully; returning error dicts would hide
+        failures from Modal's dashboard.
         """
         import requests
         import numpy as np
         import io
 
-        try:
-            # ── Call your API ──────────────────────────────────────────────
-            response = requests.post(
-                self.api_url,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "text": text,
-                    "language": "ar",
-                    # Add any other parameters your API expects:
-                    # "voice": "default",
-                    # "speed": 1.0,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
+        # ── Call your API ──────────────────────────────────────────────
+        response = requests.post(
+            self.api_url,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "text": text,
+                "language": "ar",
+                # Add any other parameters your API expects:
+                # "voice": "default",
+                # "speed": 1.0,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()  # raises on HTTP errors — exactly what we want
 
-            # ── Parse the response ─────────────────────────────────────────
-            #
-            # Adapt this section to match your API's response format.
-            # Common patterns:
-            #
-            #   A) API returns raw audio bytes (WAV/MP3):
-            #      audio_bytes = response.content
-            #
-            #   B) API returns JSON with base64 audio:
-            #      audio_base64 = response.json()["audio"]
-            #
-            #   C) API returns JSON with a download URL:
-            #      audio_url = response.json()["audio_url"]
-            #      audio_bytes = requests.get(audio_url).content
+        # ── Parse the response ─────────────────────────────────────────
+        #
+        # Adapt this section to match your API's response format.
+        # Common patterns:
+        #
+        #   A) API returns raw audio bytes (WAV/MP3):
+        #      audio_bytes = response.content
+        #
+        #   B) API returns JSON with base64 audio:
+        #      audio_base64 = response.json()["audio"]
+        #
+        #   C) API returns JSON with a download URL:
+        #      audio_url = response.json()["audio_url"]
+        #      audio_bytes = requests.get(audio_url).content
 
-            # --- Example: API returns raw WAV bytes ---
-            import soundfile as sf
+        # --- Example: API returns raw WAV bytes ---
+        import soundfile as sf
 
-            audio_bytes = response.content
-            wav_array, sample_rate = sf.read(io.BytesIO(audio_bytes))
+        audio_bytes = response.content
+        wav_array, sample_rate = sf.read(io.BytesIO(audio_bytes))
 
-            if not isinstance(wav_array, np.ndarray):
-                wav_array = np.array(wav_array)
+        if not isinstance(wav_array, np.ndarray):
+            wav_array = np.array(wav_array)
 
-            audio_base64 = self.audio_to_base64(wav_array, sample_rate)
-            return self.success_response(audio_base64, sample_rate)
-
-        except Exception as e:
-            return self.error_response(e)
+        audio_base64 = self.audio_to_base64(wav_array, sample_rate)
+        return self.success_response(audio_base64, sample_rate)

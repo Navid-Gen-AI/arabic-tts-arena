@@ -88,41 +88,34 @@ class XTTSv2Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
-            import os
+        import numpy as np
+        import os
 
-            if not os.path.exists(self._ref_audio):
-                return self.error_response(
-                    f"Reference audio not found: {self._ref_audio}"
-                )
+        if not os.path.exists(self._ref_audio):
+            raise RuntimeError(f"Reference audio not found: {self._ref_audio}")
 
-            text = text.strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = text.strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            print(f"[xtts_v2] text: {text[:80]}")
+        print(f"[xtts_v2] text: {text[:80]}")
 
-            wav = self.tts.tts(
-                text=text,
-                speaker_wav=self._ref_audio,
-                language="ar",
-            )
+        wav = self.tts.tts(
+            text=text,
+            speaker_wav=self._ref_audio,
+            language="ar",
+        )
 
-            if not isinstance(wav, np.ndarray):
-                wav = np.array(wav, dtype=np.float32)
-            wav = wav.astype(np.float32, copy=False)
+        if not isinstance(wav, np.ndarray):
+            wav = np.array(wav, dtype=np.float32)
+        wav = wav.astype(np.float32, copy=False)
 
-            if wav.ndim > 1:
-                wav = wav.reshape(-1)
+        if wav.ndim > 1:
+            wav = wav.reshape(-1)
 
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
 
-            return self.success_response(
-                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-            )
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        return self.success_response(
+            self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+        )

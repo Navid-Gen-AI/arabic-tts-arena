@@ -158,6 +158,11 @@ class ArenaService:
                 result["wall_seconds"] = wall
             return result
         except Exception as e:
+            # Models raise on failure (see BaseTTSModel); this is the one place
+            # errors are absorbed so a broken model degrades the battle instead
+            # of crashing it. The raised exception stays visible in Modal's
+            # dashboard as a failed synthesize() call.
+            print(f"❌ {model_id} synthesis failed: {e}")
             return {"success": False, "error": str(e), "model_id": model_id}
 
     # -----------------------------------------------------------------

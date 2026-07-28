@@ -103,34 +103,31 @@ class FishSpeechS2Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
-            from fish_speech.utils.schema import ServeTTSRequest
+        import numpy as np
+        from fish_speech.utils.schema import ServeTTSRequest
 
-            req = ServeTTSRequest(
-                text=text,
-                max_new_tokens=1024,
-                chunk_length=300,
-                top_p=0.8,
-                repetition_penalty=1.2,
-                temperature=0.7,
-            )
+        req = ServeTTSRequest(
+            text=text,
+            max_new_tokens=1024,
+            chunk_length=300,
+            top_p=0.8,
+            repetition_penalty=1.2,
+            temperature=0.7,
+        )
 
-            audio_segments = []
-            for result in self.engine.inference(req):
-                if result.code == "final" and result.audio is not None:
-                    _, audio_data = result.audio
-                    audio_segments.append(audio_data)
-                elif result.code == "error":
-                    return self.error_response(str(result.error))
+        audio_segments = []
+        for result in self.engine.inference(req):
+            if result.code == "final" and result.audio is not None:
+                _, audio_data = result.audio
+                audio_segments.append(audio_data)
+            elif result.code == "error":
+                raise RuntimeError(str(result.error))
 
-            if not audio_segments:
-                return self.error_response("No audio generated")
+        if not audio_segments:
+            raise RuntimeError("No audio generated")
 
-            wav = np.concatenate(audio_segments) if len(audio_segments) > 1 else audio_segments[0]
+        wav = np.concatenate(audio_segments) if len(audio_segments) > 1 else audio_segments[0]
 
-            return self.success_response(
-                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-            )
-        except Exception as e:
-            return self.error_response(e)
+        return self.success_response(
+            self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+        )

@@ -28,6 +28,7 @@ gemini_flash_tts_image = (
 @app.cls(
     image=gemini_flash_tts_image,
     scaledown_window=60,
+    retries=0,
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
 )
 class GeminiFlashTTSModel(BaseTTSModel):
@@ -48,48 +49,43 @@ class GeminiFlashTTSModel(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import re
-            import time
-            import numpy as np
-            import requests
+        import re
+        import time
+        import numpy as np
+        import requests
 
-            text = (text or "").strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            start = time.perf_counter()
+        start = time.perf_counter()
 
-            response = requests.post(
-                API_URL,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": MODEL_SLUG,
-                    "input": text,
-                    "voice": VOICE,
-                    "response_format": "pcm",  # lossless; rate in Content-Type
-                },
-                timeout=60,
-            )
-            if response.status_code != 200:
-                return self.error_response(
-                    f"OpenRouter HTTP {response.status_code}: {response.text[:300]}"
-                )
-
-            # PCM response: 16-bit mono, sample rate in the Content-Type header
-            # (e.g. "audio/pcm;rate=24000;channels=1").
-            rate_match = re.search(r"rate=(\d+)", response.headers.get("content-type", ""))
-            sample_rate = int(rate_match.group(1)) if rate_match else 24000
-            wav = np.frombuffer(response.content, dtype=np.int16).astype(np.float32) / 32768.0
-
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
-
-            return self.success_response(
-                self.audio_to_base64(wav, sample_rate), sample_rate,
-                inference_seconds=time.perf_counter() - start,
+        response = requests.post(
+            API_URL,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": MODEL_SLUG,
+                "input": text,
+                "voice": VOICE,
+                "response_format": "pcm",  # lossless; rate in Content-Type
+            },
+            timeout=60,
+        )
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"OpenRouter HTTP {response.status_code}: {response.text[:300]}"
             )
 
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        # PCM response: 16-bit mono, sample rate in the Content-Type header
+        # (e.g. "audio/pcm;rate=24000;channels=1").
+        rate_match = re.search(r"rate=(\d+)", response.headers.get("content-type", ""))
+        sample_rate = int(rate_match.group(1)) if rate_match else 24000
+        wav = np.frombuffer(response.content, dtype=np.int16).astype(np.float32) / 32768.0
+
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
+
+        return self.success_response(
+            self.audio_to_base64(wav, sample_rate), sample_rate,
+            inference_seconds=time.perf_counter() - start,
+        )

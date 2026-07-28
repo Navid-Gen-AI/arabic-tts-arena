@@ -123,36 +123,31 @@ class Nabra82MModel(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
-            import torch
-            from arabic_g2p import normalize_text
+        import numpy as np
+        import torch
+        from arabic_g2p import normalize_text
 
-            text = (text or "").strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            # diacritize() is a no-op if the text already carries tashkeel.
-            normalized, _ = normalize_text(text)
-            diacritized = self.g2p.diacritize(normalized)
-            print(f"[nabra_82m] tashkeel: {diacritized[:80]}")
+        # diacritize() is a no-op if the text already carries tashkeel.
+        normalized, _ = normalize_text(text)
+        diacritized = self.g2p.diacritize(normalized)
+        print(f"[nabra_82m] tashkeel: {diacritized[:80]}")
 
-            with torch.inference_mode():
-                chunks = [
-                    np.asarray(audio.detach().cpu() if torch.is_tensor(audio) else audio)
-                    for _, _, audio in self.pipeline(diacritized, voice=self.voice)
-                ]
-            if not chunks:
-                return self.error_response("Nabra produced no audio")
+        with torch.inference_mode():
+            chunks = [
+                np.asarray(audio.detach().cpu() if torch.is_tensor(audio) else audio)
+                for _, _, audio in self.pipeline(diacritized, voice=self.voice)
+            ]
+        if not chunks:
+            raise RuntimeError("Nabra produced no audio")
 
-            wav = np.concatenate(chunks).astype(np.float32)
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
+        wav = np.concatenate(chunks).astype(np.float32)
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
 
-            return self.success_response(
-                self.audio_to_base64(wav, SAMPLE_RATE), SAMPLE_RATE,
-            )
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        return self.success_response(
+            self.audio_to_base64(wav, SAMPLE_RATE), SAMPLE_RATE,
+        )

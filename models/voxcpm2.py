@@ -84,34 +84,29 @@ class VoxCPM2Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
+        import numpy as np
 
-            text = text.strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = text.strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            print(f"[voxcpm2] text: {text[:80]}")
+        print(f"[voxcpm2] text: {text[:80]}")
 
-            wav = self.model.generate(
-                text=text,
-                cfg_value=2.0,
-                inference_timesteps=10,
-            )
+        wav = self.model.generate(
+            text=text,
+            cfg_value=2.0,
+            inference_timesteps=10,
+        )
 
-            if not isinstance(wav, np.ndarray):
-                wav = np.array(wav, dtype=np.float32)
-            wav = wav.astype(np.float32, copy=False)
-            if wav.ndim > 1:
-                wav = wav.reshape(-1)
+        if not isinstance(wav, np.ndarray):
+            wav = np.array(wav, dtype=np.float32)
+        wav = wav.astype(np.float32, copy=False)
+        if wav.ndim > 1:
+            wav = wav.reshape(-1)
 
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
 
-            return self.success_response(
-                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
-            )
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        return self.success_response(
+            self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+        )

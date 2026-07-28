@@ -31,6 +31,7 @@ aic_tts_image = (
 @app.cls(
     image=aic_tts_image,
     scaledown_window=60,
+    retries=0,
     secrets=[modal.Secret.from_name("aic-tts-credentials")],
 )
 class AICTTSModel(BaseTTSModel):
@@ -58,45 +59,49 @@ class AICTTSModel(BaseTTSModel):
 
         speaker = random.choice(SPEAKERS)
 
-        try:
-            # The endpoint expects its request JSON embedded as a raw string;
-            # `text` is interpolated unescaped, matching the vendor's example.
-            payload_data = (
-                f'{{"text": "{text}", "speaker": "{speaker}", "type": "msa", '
-                f'"tempo": {TEMPO[speaker]}, "token": "{self.api_token}"}}'
-            )
+        # The endpoint expects its request JSON embedded as a raw string.
+        payload_data = json.dumps(
+            {
+                "text": text,
+                "speaker": speaker,
+                "type": "msa",
+                "tempo": TEMPO[speaker],
+                "token": self.api_token,
+            },
+            ensure_ascii=False,
+        )
 
-            payload = json.dumps(
-                {
-                    "inputs": [
-                        {
-                            "name": "TEXT",
-                            "shape": [1],
-                            "datatype": "BYTES",
-                            "data": [payload_data],
-                        }
-                    ],
-                    "outputs": [{"name": "AUDIO"}],
-                }
-            )
+        payload = json.dumps(
+            {
+                "inputs": [
+                    {
+                        "name": "TEXT",
+                        "shape": [1],
+                        "datatype": "BYTES",
+                        "data": [payload_data],
+                    }
+                ],
+                "outputs": [{"name": "AUDIO"}],
+            }
+        )
 
-            headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json"}
 
-            # New session per call for thread safety and clean connection handling.
-            with requests.Session() as session:
-                response = session.post(API_URL, headers=headers, data=payload)
-            print(f"API response status: {response.status_code}")
-            print(f"API response body (first 500 chars): {response.text[:500]}")
-            res_data = response.json()
+        # New session per call for thread safety and clean connection handling.
+        with requests.Session() as session:
+            response = session.post(API_URL, headers=headers, data=payload)
+        print(f"API response status: {response.status_code}")
+        print(f"API response body (first 500 chars): {response.text[:500]}")
+        response.raise_for_status()
+        res_data = response.json()
 
-            audio_samples = res_data["outputs"][0]["data"]
+        audio_samples = res_data["outputs"][0]["data"]
+        if not audio_samples:
+            raise RuntimeError("AIC API returned no audio samples")
 
-            print(f"Extracted {len(audio_samples)} audio samples. ✅")
-            audio_samples = np.array(audio_samples, dtype=np.int16)
+        print(f"Extracted {len(audio_samples)} audio samples. ✅")
+        audio_samples = np.array(audio_samples, dtype=np.int16)
 
-            audio_base64 = self.audio_to_base64(audio_samples, SAMPLE_RATE)
+        audio_base64 = self.audio_to_base64(audio_samples, SAMPLE_RATE)
 
-            return self.success_response(audio_base64, SAMPLE_RATE)
-
-        except Exception as e:
-            return self.error_response(e)
+        return self.success_response(audio_base64, SAMPLE_RATE)
