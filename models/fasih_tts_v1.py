@@ -151,47 +151,42 @@ class FasihTTSV1Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
-            import torch
+        import numpy as np
+        import torch
 
-            text = text.strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = text.strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            # normalize -> expand numbers -> diacritize-if-needed -> sacred-term
-            # lexicon -> <=160-char chunks, exactly as the official serving code.
-            chunks = self.pipe.prepare_chunks(text)
-            if not chunks:
-                return self.error_response("Input text produced no synthesizable chunks")
+        # normalize -> expand numbers -> diacritize-if-needed -> sacred-term
+        # lexicon -> <=160-char chunks, exactly as the official serving code.
+        chunks = self.pipe.prepare_chunks(text)
+        if not chunks:
+            raise ValueError("Input text produced no synthesizable chunks")
 
-            print(f"[fasih_tts_v1] text: {text[:80]}")
+        print(f"[fasih_tts_v1] text: {text[:80]}")
 
-            pieces = []
-            with torch.inference_mode():
-                for i, chunk in enumerate(chunks):
-                    out = self.model.inference(
-                        chunk,
-                        "ar",
-                        self.gpt_cond,
-                        self.speaker,
-                        temperature=self.temperature,
-                        repetition_penalty=2.0,
-                        enable_text_splitting=False,
-                    )
-                    pieces.append(np.asarray(out["wav"], dtype=np.float32))
-                    if i < len(chunks) - 1:
-                        pieces.append(self._gap)
+        pieces = []
+        with torch.inference_mode():
+            for i, chunk in enumerate(chunks):
+                out = self.model.inference(
+                    chunk,
+                    "ar",
+                    self.gpt_cond,
+                    self.speaker,
+                    temperature=self.temperature,
+                    repetition_penalty=2.0,
+                    enable_text_splitting=False,
+                )
+                pieces.append(np.asarray(out["wav"], dtype=np.float32))
+                if i < len(chunks) - 1:
+                    pieces.append(self._gap)
 
-            wav = np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
+        wav = np.concatenate(pieces) if pieces else np.zeros(0, dtype=np.float32)
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
 
-            print(f"[fasih_tts_v1] audio: len={wav.size}, sr={self.sample_rate}")
+        print(f"[fasih_tts_v1] audio: len={wav.size}, sr={self.sample_rate}")
 
-            audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        audio_base64 = self.audio_to_base64(wav, self.sample_rate)
+        return self.success_response(audio_base64, self.sample_rate)

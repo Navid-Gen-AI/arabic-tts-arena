@@ -85,32 +85,27 @@ class OmniVoiceModel(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            from omnivoice import OmniVoiceGenerationConfig
+        from omnivoice import OmniVoiceGenerationConfig
 
-            print(f"[omnivoice] instruct='{VOICE_INSTRUCT}', text={text[:60]}…")
+        print(f"[omnivoice] instruct='{VOICE_INSTRUCT}', text={text[:60]}…")
 
-            gen_config = OmniVoiceGenerationConfig(
-                num_step=32,
-                guidance_scale=2.0,
-                denoise=True,
-                postprocess_output=True,
-            )
-            audios = self.model.generate(
-                text=text,
-                instruct=VOICE_INSTRUCT,
-                generation_config=gen_config,
-            )
+        gen_config = OmniVoiceGenerationConfig(
+            num_step=32,
+            guidance_scale=2.0,
+            denoise=True,
+            postprocess_output=True,
+        )
+        audios = self.model.generate(
+            text=text,
+            instruct=VOICE_INSTRUCT,
+            generation_config=gen_config,
+        )
 
-            # generate() returns a list of (1, T) tensors at 24 kHz.
-            wav_np = audios[0].squeeze().cpu().numpy()
+        # generate() returns a list of (1, T) tensors at 24 kHz.
+        wav_np = audios[0].squeeze().cpu().numpy()
 
-            result = self.success_response(
-                self.audio_to_base64(wav_np, self.sample_rate), self.sample_rate,
-            )
-            result["voice_mode"] = "design"
-            return result
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        result = self.success_response(
+            self.audio_to_base64(wav_np, self.sample_rate), self.sample_rate,
+        )
+        result["voice_mode"] = "design"
+        return result

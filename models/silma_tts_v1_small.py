@@ -83,18 +83,13 @@ class SilmaSmallTTSModel(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            wav, sr, spec = self.model.infer(
-                ref_file=self._ref_audio_path,
-                ref_text=self._ref_text,
-                gen_text=text,
-                file_wave=None,
-                seed=None,
-                speed=1
-            )
+        wav, sr, spec = self.model.infer(
+            ref_file=self._ref_audio_path,
+            ref_text=self._ref_text,
+            gen_text=text,
+            file_wave=None,
+            seed=None,
+            speed=1
+        )
 
-            return self.success_response(self.audio_to_base64(wav, sr), sr)
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        return self.success_response(self.audio_to_base64(wav, sr), sr)

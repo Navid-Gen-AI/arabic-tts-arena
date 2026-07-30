@@ -132,6 +132,13 @@ class BaseTTSModel:
         load_model()            — called once on container start (@modal.enter())
         synthesize(text) -> dict — generate audio (@modal.method())
 
+    Error policy: synthesize() RAISES on failure (ValueError for bad input,
+    RuntimeError for backend/API failures) — never catch-and-return an error
+    dict. service.py catches exceptions at the .remote() call site and degrades
+    gracefully; swallowing errors model-side hides failures from Modal's
+    dashboard and logs. Pair with retries=0 on @app.cls so broken models fail
+    fast and visibly.
+
     Synthesis timing is automatic: every subclass's synthesize() is wrapped at
     class-definition time, and successful responses gain `inference_seconds`
     (model-side synthesis wall time) without any per-model code.
@@ -189,13 +196,6 @@ class BaseTTSModel:
         if inference_seconds is not None:
             response["inference_seconds"] = round(inference_seconds, 2)
         return response
-
-    def error_response(self, error: str) -> dict:
-        return {
-            "success": False,
-            "error": str(error),
-            "model_id": self.model_id,
-        }
 
 
 # =============================================================================

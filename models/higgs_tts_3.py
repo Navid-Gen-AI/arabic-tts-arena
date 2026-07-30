@@ -133,37 +133,32 @@ class HiggsTTS3Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import torch
+        import torch
 
-            text = (text or "").strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = (text or "").strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            # Fixed seed keeps the sampled delivery stable across battles.
-            torch.manual_seed(42)
+        # Fixed seed keeps the sampled delivery stable across battles.
+        torch.manual_seed(42)
 
-            with torch.inference_mode():
-                audio = self.model.generate_speech(
-                    text,
-                    self.tokenizer,
-                    max_new_tokens=2048,
-                    temperature=0.7,
-                    top_p=0.95,
-                    top_k=50,
-                    reference_audio=self.ref_wav,
-                    reference_sample_rate=self.ref_sr,
-                    reference_text=REF_TEXT,
-                )
-
-            wav = audio.detach().float().cpu().numpy()
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
-
-            return self.success_response(
-                self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+        with torch.inference_mode():
+            audio = self.model.generate_speech(
+                text,
+                self.tokenizer,
+                max_new_tokens=2048,
+                temperature=0.7,
+                top_p=0.95,
+                top_k=50,
+                reference_audio=self.ref_wav,
+                reference_sample_rate=self.ref_sr,
+                reference_text=REF_TEXT,
             )
 
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        wav = audio.detach().float().cpu().numpy()
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
+
+        return self.success_response(
+            self.audio_to_base64(wav, self.sample_rate), self.sample_rate,
+        )

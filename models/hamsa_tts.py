@@ -34,6 +34,7 @@ hamsa_tts_image = (
 @app.cls(
     image=hamsa_tts_image,
     scaledown_window=60,
+    retries=0,
     secrets=[modal.Secret.from_name("hamsa-tts-credentials")],
 )
 class HamsaTTSModel(BaseTTSModel):
@@ -61,32 +62,28 @@ class HamsaTTSModel(BaseTTSModel):
         import io
         import random
 
-        try:
-            response = requests.post(
-                API_URL,
-                headers={
-                    "Authorization": f"Token {self.api_token}",
-                    "Content-Type": "application/json",
-                    # The API expects the key as a cookie, not a header.
-                    "Cookie": f"api_key={self.api_key}",
-                },
-                json={
-                    "text": text,
-                    "speaker": random.choice(SPEAKER_IDS),
-                    "dialect": "msa",
-                    "mulaw": False,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
+        response = requests.post(
+            API_URL,
+            headers={
+                "Authorization": f"Token {self.api_token}",
+                "Content-Type": "application/json",
+                # The API expects the key as a cookie, not a header.
+                "Cookie": f"api_key={self.api_key}",
+            },
+            json={
+                "text": text,
+                "speaker": random.choice(SPEAKER_IDS),
+                "dialect": "msa",
+                "mulaw": False,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
 
-            wav_array, sample_rate = sf.read(io.BytesIO(response.content))
+        wav_array, sample_rate = sf.read(io.BytesIO(response.content))
 
-            if not isinstance(wav_array, np.ndarray):
-                wav_array = np.array(wav_array, dtype=np.float32)
+        if not isinstance(wav_array, np.ndarray):
+            wav_array = np.array(wav_array, dtype=np.float32)
 
-            audio_base64 = self.audio_to_base64(wav_array, sample_rate)
-            return self.success_response(audio_base64, sample_rate)
-
-        except Exception as e:
-            return self.error_response(e)
+        audio_base64 = self.audio_to_base64(wav_array, sample_rate)
+        return self.success_response(audio_base64, sample_rate)

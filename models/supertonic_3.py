@@ -70,33 +70,28 @@ class Supertonic3Model(BaseTTSModel):
 
     @modal.method()
     def synthesize(self, text: str) -> dict:
-        try:
-            import numpy as np
+        import numpy as np
 
-            text = text.strip()
-            if not text:
-                return self.error_response("Input text is empty")
+        text = text.strip()
+        if not text:
+            raise ValueError("Input text is empty")
 
-            wav, _duration = self.tts.synthesize(
-                text,
-                voice_style=self.voice_style,
-                lang="ar",
-            )
-            wav = np.asarray(wav, dtype=np.float32)
-            duration = np.asarray(_duration).reshape(-1)
-            if wav.ndim > 1:
-                wav = wav[0]
-            # Trim to the model-reported duration — raw output is padded.
-            if duration.size:
-                expected_samples = int(self.sample_rate * float(duration[0]))
-                wav = wav[:expected_samples]
+        wav, _duration = self.tts.synthesize(
+            text,
+            voice_style=self.voice_style,
+            lang="ar",
+        )
+        wav = np.asarray(wav, dtype=np.float32)
+        duration = np.asarray(_duration).reshape(-1)
+        if wav.ndim > 1:
+            wav = wav[0]
+        # Trim to the model-reported duration — raw output is padded.
+        if duration.size:
+            expected_samples = int(self.sample_rate * float(duration[0]))
+            wav = wav[:expected_samples]
 
-            if wav.size < 100:
-                return self.error_response(f"Audio too short: {wav.size} samples")
+        if wav.size < 100:
+            raise RuntimeError(f"Audio too short: {wav.size} samples")
 
-            audio_base64 = self.audio_to_base64(wav, self.sample_rate)
-            return self.success_response(audio_base64, self.sample_rate)
-
-        except Exception as e:
-            import traceback
-            return self.error_response(f"{e}\n{traceback.format_exc()}")
+        audio_base64 = self.audio_to_base64(wav, self.sample_rate)
+        return self.success_response(audio_base64, self.sample_rate)

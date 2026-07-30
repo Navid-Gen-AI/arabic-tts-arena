@@ -105,20 +105,17 @@ class ChatterboxMultilingualV3Model(BaseTTSModel):
     @modal.method()
     def synthesize(self, text: str) -> dict:
         """Synthesize Arabic text to speech."""
-        try:
-            wav = self.model.generate(
-                text,
-                language_id="ar",
-                audio_prompt_path=self._ar_prompt_path,
-                exaggeration=0.5,
-                temperature=0.8,
-                cfg_weight=0.5,
-            )
+        wav = self.model.generate(
+            text,
+            language_id="ar",
+            audio_prompt_path=self._ar_prompt_path,
+            exaggeration=0.5,
+            temperature=0.8,
+            cfg_weight=0.5,
+        )
 
-            # wav is a torch tensor, convert to numpy
-            wav_np = wav.squeeze().cpu().numpy()
-            audio_base64 = self.audio_to_base64(wav_np, self.sample_rate)
+        # wav is a torch tensor, convert to numpy
+        wav_np = wav.squeeze().cpu().numpy()
+        audio_base64 = self.audio_to_base64(wav_np, self.sample_rate)
 
-            return self.success_response(audio_base64, self.sample_rate)
-        except Exception as e:
-            return self.error_response(e)
+        return self.success_response(audio_base64, self.sample_rate)

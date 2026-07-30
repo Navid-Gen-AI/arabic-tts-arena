@@ -50,6 +50,7 @@ audar_tts_image = (
     # cold-starts count against us. Keep the (cheap, CPU-only) container warm
     # a bit longer — matches the precedent set for fish_speech_s2 upstream.
     scaledown_window=120,
+    retries=0,
     secrets=[modal.Secret.from_name("audar-tts-credentials")],
 )
 class AudarTTSModel(BaseTTSModel):
@@ -88,49 +89,45 @@ class AudarTTSModel(BaseTTSModel):
         import numpy as np
         import soundfile as sf
 
-        try:
-            response = requests.post(
-                self.endpoint,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                    "Accept": "audio/wav",
-                },
-                json={
-                    "text": text,
-                    "voice": random.choice(self.voices),
-                    "model": self.tts_model,
-                    "response_format": "wav",
-                    "speed": 1.0,
-                },
-                timeout=25,  # under the 30 s arena cap, leaves a safety margin
-            )
-            response.raise_for_status()
+        response = requests.post(
+            self.endpoint,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "Accept": "audio/wav",
+            },
+            json={
+                "text": text,
+                "voice": random.choice(self.voices),
+                "model": self.tts_model,
+                "response_format": "wav",
+                "speed": 1.0,
+            },
+            timeout=25,  # under the 30 s arena cap, leaves a safety margin
+        )
+        response.raise_for_status()
 
-            # The API returns WAV bytes; decode to numpy + sample_rate so the
-            # BaseTTSModel helper can re-emit normalized WAV.
-            wav_array, sample_rate = sf.read(io.BytesIO(response.content))
-            if not isinstance(wav_array, np.ndarray):
-                wav_array = np.array(wav_array, dtype=np.float32)
-            # Downmix to mono if the API ever returns stereo
-            if wav_array.ndim > 1:
-                wav_array = wav_array.mean(axis=1)
+        # The API returns WAV bytes; decode to numpy + sample_rate so the
+        # BaseTTSModel helper can re-emit normalized WAV.
+        wav_array, sample_rate = sf.read(io.BytesIO(response.content))
+        if not isinstance(wav_array, np.ndarray):
+            wav_array = np.array(wav_array, dtype=np.float32)
+        # Downmix to mono if the API ever returns stereo
+        if wav_array.ndim > 1:
+            wav_array = wav_array.mean(axis=1)
 
-            # Guard: the API returns HTTP 200 with near-silent audio for
-            # unknown voice names — fail loudly instead of serving silence.
-            wav_array = wav_array.astype(np.float64)
-            rms = float(np.sqrt(np.mean(wav_array**2)))
-            if rms < 1e-4:  # ≈ -80 dBFS
-                return self.error_response("API returned empty/silent audio")
+        # Guard: the API returns HTTP 200 with near-silent audio for
+        # unknown voice names — fail loudly instead of serving silence.
+        wav_array = wav_array.astype(np.float64)
+        rms = float(np.sqrt(np.mean(wav_array**2)))
+        if rms < 1e-4:  # ≈ -80 dBFS
+            raise RuntimeError("API returned empty/silent audio")
 
-            # Loudness normalization (see TARGET_RMS_DBFS note above).
-            wav_array = wav_array * (10 ** (TARGET_RMS_DBFS / 20.0) / rms)
-            peak = float(np.max(np.abs(wav_array)))
-            if peak > PEAK_CAP:
-                wav_array = wav_array * (PEAK_CAP / peak)
+        # Loudness normalization (see TARGET_RMS_DBFS note above).
+        wav_array = wav_array * (10 ** (TARGET_RMS_DBFS / 20.0) / rms)
+        peak = float(np.max(np.abs(wav_array)))
+        if peak > PEAK_CAP:
+            wav_array = wav_array * (PEAK_CAP / peak)
 
-            audio_base64 = self.audio_to_base64(wav_array, int(sample_rate))
-            return self.success_response(audio_base64, int(sample_rate))
-
-        except Exception as e:
-            return self.error_response(e)
+        audio_base64 = self.audio_to_base64(wav_array, int(sample_rate))
+        return self.success_response(audio_base64, int(sample_rate))

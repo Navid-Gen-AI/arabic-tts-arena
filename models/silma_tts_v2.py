@@ -32,6 +32,7 @@ with silma_tts_v2_image.imports():
 @app.cls(
     image=silma_tts_v2_image,
     scaledown_window=60,
+    retries=0,
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
 )
 class SilmaV2TTSModel(BaseTTSModel):
@@ -122,25 +123,18 @@ class SilmaV2TTSModel(BaseTTSModel):
         speed = random.choice(SPEED_CHOICES)
         creativity = random.choice(CREATIVITY_CHOICES)
 
-        try:
-            all_audio_chunks = []
-            print("Starting Streaming ...")
-            for audio_chunk in self.stream_waveform(text, voice_id, creativity, speed):
-                if audio_chunk is not None:
-                    all_audio_chunks.append(audio_chunk)
+        all_audio_chunks = []
+        print("Starting Streaming ...")
+        for audio_chunk in self.stream_waveform(text, voice_id, creativity, speed):
+            if audio_chunk is not None:
+                all_audio_chunks.append(audio_chunk)
 
-            if len(all_audio_chunks) > 0:
-                full_waveform = np.concatenate(all_audio_chunks)
+        if len(all_audio_chunks) > 0:
+            full_waveform = np.concatenate(all_audio_chunks)
 
-                audio_base64 = self.audio_to_base64(full_waveform, self.sample_rate)
+            audio_base64 = self.audio_to_base64(full_waveform, self.sample_rate)
 
-                if audio_base64:
-                    return self.success_response(audio_base64, self.sample_rate)
-            else:
-                # `raise <dict>` is a TypeError; the except below turns it into
-                # the actual error response. Kept as-is from the original.
-                raise self.error_response("Empty audio chunks from API response.")
-
-        except Exception as e:
-            print(f"Generation error: {e}")
-            return self.error_response(e)
+            if audio_base64:
+                return self.success_response(audio_base64, self.sample_rate)
+        else:
+            raise RuntimeError("Empty audio chunks from API response.")
