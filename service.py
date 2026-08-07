@@ -4,6 +4,7 @@ import os
 import json
 import base64
 import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional
 from dataclasses import asdict
@@ -22,7 +23,7 @@ from storage import (
     build_audio_cache,
     _append_variant,
 )
-from elo import compute_leaderboard
+from elo import compute_leaderboard, compute_point_ratings
 
 # Probability of returning cached audio scales with the number of stored
 # variants N for the (text, model) pair:
@@ -274,14 +275,94 @@ class ArenaService:
 
 
 # =============================================================================
+# Dialect classification — per-dialect leaderboard cells for the frontend
+# =============================================================================
+
+# Prompt dialect comes from a small text classifier; its country-level labels
+# are grouped into the coarse buckets shown as leaderboard tabs. The router's
+# 'ar' label is MSA and 'en' (English / code-switched prompts) maps to no
+# bucket — those votes count toward the overall ranking only.
+DIALECT_ROUTER_MODEL = "oddadmix/dialect-router-v0.2"
+DIALECT_BUCKETS: dict[str, tuple[str, set[str]]] = {
+    "msa": ("MSA / الفصحى", {"ar"}),
+    "gulf": ("Gulf / خليجي", {"sa", "bh", "iq", "ye"}),
+    "egyptian": ("Egyptian / مصري", {"eg", "sd"}),
+    "levantine": ("Levantine / شامي", {"lb", "sy", "ps"}),
+    "maghrebi": ("Maghrebi / مغاربي", {"ma", "dz", "tn", "ly"}),
+}
+
+# The cron needs CPU torch + transformers for the router (~12M params);
+# ArenaService containers stay on the lean service_image. Built from scratch
+# (mirroring service_image + router deps) because Modal requires
+# add_local_python_source to be the image's final layers.
+dialect_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .uv_pip_install(
+        "pydantic",
+        "huggingface_hub",
+        "transformers",
+        "torch",
+        extra_index_url="https://download.pytorch.org/whl/cpu",
+    )
+    .add_local_python_source("app", "service", "storage", "elo", "models")
+)
+
+
+def classify_dialects(texts: list[str]) -> dict[str, str]:
+    """Map each unique prompt to the router's dialect label."""
+    import torch
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(DIALECT_ROUTER_MODEL)
+    model = AutoModelForSequenceClassification.from_pretrained(DIALECT_ROUTER_MODEL)
+    model.eval()
+
+    labels: dict[str, str] = {}
+    with torch.no_grad():
+        for i in range(0, len(texts), 64):
+            batch = texts[i : i + 64]
+            enc = tokenizer(
+                batch, return_tensors="pt", truncation=True, padding=True, max_length=128
+            )
+            preds = model(**enc).logits.argmax(-1).tolist()
+            for text, idx in zip(batch, preds):
+                labels[text] = model.config.id2label[idx]
+    return labels
+
+
+def build_dialect_data(votes: list[Vote]) -> tuple[dict, dict]:
+    """Build the leaderboard.json dialect payload from all votes.
+
+    Returns (meta, cells):
+        meta:  {bucket: {"label": str, "votes": int}}
+        cells: {model_id: {bucket: {"elo": int, "battles": int}}}
+    """
+    texts = sorted({v.text.strip() for v in votes})
+    label_of = classify_dialects(texts)
+
+    meta: dict[str, dict] = {}
+    cells: dict[str, dict] = defaultdict(dict)
+    for key, (label, codes) in DIALECT_BUCKETS.items():
+        subset = [v for v in votes if label_of.get(v.text.strip()) in codes]
+        if not subset:
+            continue
+        ratings, battles = compute_point_ratings(subset)
+        meta[key] = {"label": label, "votes": len(subset)}
+        for mid, n in battles.items():
+            cells[mid][key] = {"elo": round(ratings[mid]), "battles": n}
+    return meta, dict(cells)
+
+
+# =============================================================================
 # Cron Job — push leaderboard.json to HuggingFace Space daily
 # =============================================================================
 
 @app.function(
-    image=service_image,
+    image=dialect_image,
     volumes={"/data": votes_volume},
     schedule=modal.Cron("0 0 * * *"),
     secrets=[modal.Secret.from_name("hf-ar-tts-arena")],
+    timeout=900,
 )
 def update_leaderboard_file():
     """Recompute Bradley-Terry ratings from all votes and upload leaderboard.json."""
@@ -290,6 +371,7 @@ def update_leaderboard_file():
     votes = load_votes()
     stats = compute_leaderboard(votes, MODEL_REGISTRY)
     ranked = sorted(stats.values(), key=lambda s: s.elo, reverse=True)
+    dialect_meta, dialect_cells = build_dialect_data(votes)
 
     # Active models ranked first; retired models appended at the bottom.
     active = [s for s in ranked if not MODEL_REGISTRY.get(s.model_id, {}).get("retired", False)]
@@ -299,6 +381,7 @@ def update_leaderboard_file():
     leaderboard_data = {
         "last_updated": datetime.now(timezone.utc).isoformat(),
         "total_votes": len(votes),
+        "dialects": dialect_meta,
         "models": [
             {
                 "rank": i + 1,
@@ -318,13 +401,21 @@ def update_leaderboard_file():
                 "retired": MODEL_REGISTRY.get(s.model_id, {}).get("retired", False),
                 "rank_lo": s.rank_lo,
                 "rank_hi": s.rank_hi,
+                # Per-dialect {elo, battles} cells (non-retired models only);
+                # display thresholds live in the frontend.
+                **(
+                    {"dialects": dialect_cells[s.model_id]}
+                    if s.model_id in dialect_cells
+                    and not MODEL_REGISTRY.get(s.model_id, {}).get("retired", False)
+                    else {}
+                ),
             }
             for i, s in enumerate(ordered)
         ],
     }
 
     HfApi().upload_file(
-        path_or_fileobj=json.dumps(leaderboard_data, indent=2).encode(),
+        path_or_fileobj=json.dumps(leaderboard_data, indent=2, ensure_ascii=False).encode(),
         path_in_repo="leaderboard.json",
         repo_id="Navid-AI/Arabic-TTS-Arena",
         repo_type="space",

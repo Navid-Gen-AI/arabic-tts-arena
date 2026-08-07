@@ -112,6 +112,31 @@ def _strengths_to_ratings(
     return ratings
 
 
+def compute_point_ratings(votes: list[Vote]) -> tuple[dict[str, float], dict[str, int]]:
+    """Point-estimate BT ratings and per-model battle counts for a vote subset.
+
+    Lightweight companion to compute_leaderboard — no bootstrap, no ModelStats.
+    Used by the leaderboard cron to rate each dialect's vote subset.
+    """
+    win_matrix: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    battles: dict[str, int] = defaultdict(int)
+
+    for vote in votes:
+        a_id, b_id = vote.model_a, vote.model_b
+        battles[a_id] += 1
+        battles[b_id] += 1
+        if vote.winner == "model_a":
+            win_matrix[a_id][b_id] += 1.0
+        elif vote.winner == "model_b":
+            win_matrix[b_id][a_id] += 1.0
+        elif vote.winner in ("both_good", "both_bad"):
+            win_matrix[a_id][b_id] += 0.5
+            win_matrix[b_id][a_id] += 0.5
+
+    strengths = _fit_bradley_terry(sorted(battles), win_matrix)
+    return _strengths_to_ratings(strengths), dict(battles)
+
+
 # ---------------------------------------------------------------------------
 # ModelStats — public interface (unchanged field names for compatibility)
 # ---------------------------------------------------------------------------
