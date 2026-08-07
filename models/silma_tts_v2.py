@@ -39,7 +39,7 @@ class SilmaV2TTSModel(BaseTTSModel):
     """SILMA TTS v2 — API-based Arabic text-to-speech."""
 
     model_id = "silma_tts_v2"
-    display_name = "SILMA TTS v2"
+    display_name = "SILMA TTS v2 MSA"
     model_url = "https://silma.ai/arabic-tts-models"
     gpu = ""
     open_weight = False
