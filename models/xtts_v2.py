@@ -7,8 +7,8 @@ Model: https://huggingface.co/tts-hub/XTTS-v2
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 XTTS_MODEL_NAME = "tts_models/multilingual/multi-dataset/xtts_v2"
 
@@ -61,7 +61,7 @@ xtts_v2_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=xtts_v2_image,
     gpu="T4",
     scaledown_window=120,

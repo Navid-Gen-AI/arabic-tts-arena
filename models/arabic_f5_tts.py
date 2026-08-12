@@ -1,8 +1,8 @@
 import modal
 import re
 import unicodedata
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # Arabic-F5-TTS v2 — F5-TTS fine-tuned for Arabic (similar to Habibi TTS
 # but uses a custom fork and different checkpoint/vocab).
@@ -70,7 +70,7 @@ arabic_f5_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=arabic_f5_tts_image,
     gpu="T4",
     scaledown_window=120,
@@ -90,6 +90,7 @@ class ArabicF5TTSModel(BaseTTSModel):
     display_name = "Arabic F5-TTS"
     model_url = "https://huggingface.co/IbrahimSalah/Arabic-F5-TTS-v2"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

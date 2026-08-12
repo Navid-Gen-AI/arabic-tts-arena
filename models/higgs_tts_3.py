@@ -11,8 +11,8 @@ Port:  https://huggingface.co/multimodalart/higgs-audio-v3-tts-4b-transformers
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "multimodalart/higgs-audio-v3-tts-4b-transformers"
 # The port runs trust_remote_code — pin so upstream pushes can't change what we execute.
@@ -73,7 +73,7 @@ higgs_tts_3_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=higgs_tts_3_image,
     gpu="A10G",  # 4B params in bf16 (~9 GB) + audio codec fit comfortably in 24 GB
     scaledown_window=120,

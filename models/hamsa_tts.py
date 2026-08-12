@@ -8,8 +8,8 @@ https://tryhamsa.com
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 API_URL = "https://api.tryhamsa.com/v1/realtime/tts"
 SPEAKER_IDS = [
@@ -31,7 +31,7 @@ hamsa_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=hamsa_tts_image,
     scaledown_window=60,
     retries=0,
@@ -45,6 +45,7 @@ class HamsaTTSModel(BaseTTSModel):
     model_url = "https://tryhamsa.com"
     gpu = ""
     open_weight = False
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

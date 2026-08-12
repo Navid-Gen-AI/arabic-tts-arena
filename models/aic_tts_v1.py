@@ -8,8 +8,8 @@ https://www.aic.gov.eg/
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 API_URL = "https://arena.aic.gov.eg/v2/models/tts_pipeline/infer"
 SPEAKERS = ["sara", "adam"]
@@ -28,7 +28,7 @@ aic_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=aic_tts_image,
     scaledown_window=60,
     retries=0,

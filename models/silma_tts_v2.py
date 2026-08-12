@@ -8,8 +8,8 @@ https://silma.ai/arabic-tts-models
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 API_URL = "https://api.silma.ai/tts/v2/stream"
 API_MODEL_ID = "silma-tts-v2-msa"
@@ -29,7 +29,7 @@ with silma_tts_v2_image.imports():
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=silma_tts_v2_image,
     scaledown_window=60,
     retries=0,

@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 fish_speech_image = (
     modal.Image.from_registry(
@@ -29,7 +29,7 @@ fish_speech_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=fish_speech_image,
     gpu="T4",
     scaledown_window=120,
@@ -43,6 +43,7 @@ class FishSpeechModel(BaseTTSModel):
     display_name = "Fish Speech S1-mini"
     model_url = "https://huggingface.co/fishaudio/s1-mini"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

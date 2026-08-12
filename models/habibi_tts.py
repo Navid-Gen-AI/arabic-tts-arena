@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # Reference text for the Unified model (MSA — Modern Standard Arabic).
 # Source: official Habibi-TTS assets (ElevenLabs voice library, ID JjTirzdD7T3GMLkwdd3a).
@@ -45,7 +45,7 @@ habibi_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=habibi_image,
     gpu="T4",
     scaledown_window=120,
@@ -59,6 +59,7 @@ class HabibiTTSModel(BaseTTSModel):
     display_name = "Habibi TTS"
     model_url = "https://github.com/SWivid/Habibi-TTS"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

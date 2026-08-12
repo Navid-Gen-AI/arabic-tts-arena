@@ -1,8 +1,8 @@
 
 import modal
 import os
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 import random
 
 silma_tts_large_v1_image = (
@@ -15,7 +15,7 @@ silma_tts_large_v1_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=silma_tts_large_v1_image,
     scaledown_window=60,
     secrets=[modal.Secret.from_name("silma-tts-cloud-api")],
@@ -33,6 +33,7 @@ class SilmaLargeTTSModel(BaseTTSModel):
     model_url = "https://silma.ai/arabic-tts-models"            # link to your model/product page
     gpu = ""                                         # empty for API-based models (no GPU)
     open_weight = False
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()

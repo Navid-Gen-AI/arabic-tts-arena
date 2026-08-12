@@ -12,8 +12,8 @@ Each request picks one of the configured voices at random.
 import modal
 import os
 import random
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 BASE_URL = "https://prod.audarai.com/apiv2"
 TTS_MODEL = "audar-tts-v1-pro"
@@ -44,7 +44,7 @@ audar_tts_image = (
 # 2. Register the model
 # ---------------------------------------------------------------------------
 @register_model
-@app.cls(
+@arena_cls(
     image=audar_tts_image,
     # Leaderboard latency is timed around the whole remote call, so container
     # cold-starts count against us. Keep the (cheap, CPU-only) container warm

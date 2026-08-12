@@ -144,6 +144,10 @@ class ArenaService:
         # --- cache miss → call the model ---
         try:
             model_info = MODEL_REGISTRY[model_id]
+            # Retired models keep registry entries (leaderboard history) but
+            # their classes are no longer deployed — fail fast and clearly.
+            if model_info.get("retired", False):
+                raise ValueError(f"model '{model_id}' is retired")
             ModelCls = modal.Cls.from_name("arabic-tts-arena", model_info["class_name"])
 
             t0 = time.perf_counter()

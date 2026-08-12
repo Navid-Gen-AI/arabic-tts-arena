@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 moss_tts_image = (
     modal.Image.from_registry(
@@ -37,7 +37,7 @@ moss_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=moss_tts_image,
     gpu="A100-40GB",
     scaledown_window=60,
@@ -55,6 +55,7 @@ class MossTTSModel(BaseTTSModel):
     display_name = "MOSS-TTS"
     model_url = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS"
     gpu = "A100-40GB"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

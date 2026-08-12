@@ -7,8 +7,8 @@ Model: https://huggingface.co/silma-ai/silma-tts
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # Fixed Arabic reference clip from the upstream repo, plus its transcript.
 REF_AUDIO_URL = (
@@ -52,7 +52,7 @@ silma_tts_v1_small_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=silma_tts_v1_small_image,
     gpu="T4",
     scaledown_window=120,

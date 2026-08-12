@@ -8,8 +8,8 @@ Repo:  https://github.com/fishaudio/fish-speech
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "fishaudio/s2-pro"
 CHECKPOINT_DIR = "/root/checkpoints/s2-pro"
@@ -51,7 +51,7 @@ fish_speech_s2_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=fish_speech_s2_image,
     gpu="A10G",
     scaledown_window=120,

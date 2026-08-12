@@ -18,8 +18,8 @@ TTS model via an API. Copy this file, rename it, and adapt it.
 
 import modal
 import os
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # ---------------------------------------------------------------------------
 # 1. Define your image — lightweight, no GPU needed for API calls
@@ -38,7 +38,7 @@ example_api_image = (
 # 2. Register your model
 # ---------------------------------------------------------------------------
 @register_model
-@app.cls(
+@arena_cls(
     image=example_api_image,
     # No GPU needed — we're just calling an API
     scaledown_window=60,

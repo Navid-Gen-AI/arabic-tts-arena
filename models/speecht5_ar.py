@@ -1,7 +1,7 @@
 import modal
 import re
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # MBZUAI SpeechT5 Arabic — SpeechT5 fine-tuned on ClArTTS (Classical Arabic).
 # Uses pre-computed x-vector speaker embeddings instead of reference audio.
@@ -51,7 +51,7 @@ speecht5_ar_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=speecht5_ar_image,
     gpu="T4",
     scaledown_window=120,
@@ -71,6 +71,7 @@ class SpeechT5ArabicModel(BaseTTSModel):
     display_name = "SpeechT5 Arabic"
     model_url = "https://huggingface.co/MBZUAI/speecht5_tts_clartts_ar"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

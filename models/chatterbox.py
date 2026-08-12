@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # The multilingual Chatterbox model is NOT available via `chatterbox-tts` pip package.
 # It lives in a custom `src/chatterbox` module in the HF Space. We clone it at image
@@ -60,7 +60,7 @@ chatterbox_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=chatterbox_image,
     gpu="T4",
     scaledown_window=120,
@@ -74,6 +74,7 @@ class ChatterboxModel(BaseTTSModel):
     display_name = "Multilingual Chatterbox"
     model_url = "https://huggingface.co/ResembleAI/chatterbox"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

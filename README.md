@@ -14,8 +14,8 @@ Blind A/B voting platform for Arabic text-to-speech models. Users hear two anony
 
 ```python
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # Each model defines its own image — install only what you need
 your_image = (
@@ -26,8 +26,8 @@ your_image = (
 )
 
 @register_model
-@app.cls(image=your_image, gpu="T4", scaledown_window=300,
-         secrets=[modal.Secret.from_name("hf-ar-tts-arena")])
+@arena_cls(image=your_image, gpu="T4", scaledown_window=300,
+           secrets=[modal.Secret.from_name("hf-ar-tts-arena")])
 class YourModel(BaseTTSModel):
     model_id = "your_model"
     display_name = "Your Model"

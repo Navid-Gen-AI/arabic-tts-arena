@@ -7,8 +7,8 @@ Model: https://huggingface.co/Supertone/supertonic-3
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 VOICE_NAME = "M4"
 
@@ -40,7 +40,7 @@ supertonic_3_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=supertonic_3_image,
     scaledown_window=60,
     retries=0,

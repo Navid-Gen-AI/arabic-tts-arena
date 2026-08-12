@@ -8,8 +8,8 @@ Paper: https://arxiv.org/abs/2604.00688
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "k2-fsa/OmniVoice"
 # Voice Design description — OmniVoice generates a voice matching this text.
@@ -54,7 +54,7 @@ omnivoice_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=omnivoice_image,
     gpu="A10G",
     scaledown_window=60,

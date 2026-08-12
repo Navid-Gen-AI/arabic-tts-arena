@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # KaniTTS Arabic — dedicated Arabic model, 400M params, 22kHz output.
 # Uses the lightweight `kani-tts` pip package which bundles the NeMo codec
@@ -48,7 +48,7 @@ kani_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=kani_tts_image,
     gpu="T4",
     scaledown_window=120,
@@ -68,6 +68,7 @@ class KaniTTSModel(BaseTTSModel):
     display_name = "KaniTTS Arabic"
     model_url = "https://huggingface.co/nineninesix/kani-tts-400m-ar"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

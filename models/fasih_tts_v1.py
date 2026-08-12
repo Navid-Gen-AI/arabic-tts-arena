@@ -10,8 +10,8 @@ Source: https://github.com/NightPrinceY/Fasih-TTS-V1 (front-end + serving code, 
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "NightPrince/Fasih-TTS-V1"
 MODEL_DIR = "/root/model"
@@ -80,7 +80,7 @@ fasih_tts_v1_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=fasih_tts_v1_image,
     gpu="T4",  # Turing (sm_75) — same GPU family the model was trained/benchmarked on
     scaledown_window=120,

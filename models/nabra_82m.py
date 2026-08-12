@@ -9,8 +9,8 @@ Demo:  https://huggingface.co/spaces/oddadmix/Nabra-82M-Demo
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "oddadmix/Nabra-82M-v0.1"
 MODEL_REVISION = "adf6abf35c46db5f2b08803b5067a12c759b1ee1"
@@ -64,7 +64,7 @@ nabra_82m_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=nabra_82m_image,
     scaledown_window=60,
     retries=0,

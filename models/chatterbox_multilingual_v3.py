@@ -16,8 +16,8 @@ License: MIT
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # Official resemble-ai/chatterbox repo. Its src/ ships the opt-in V3
 # multilingual loader (t3_model="v3"); the last tagged PyPI release (v0.1.2,
@@ -71,7 +71,7 @@ chatterbox_v3_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=chatterbox_v3_image,
     gpu="T4",
     scaledown_window=120,

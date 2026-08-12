@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 import random
 
 # Dialect-specific reference audio & prompts bundled in the HF Space
@@ -116,7 +116,7 @@ lahgtna_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=lahgtna_image,
     gpu="T4",
     scaledown_window=120,
@@ -134,6 +134,7 @@ class LahgtnaChatterboxModel(BaseTTSModel):
     display_name = "Lahgtna"
     model_url = "https://huggingface.co/oddadmix/lahgtna-chatterbox-v0"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

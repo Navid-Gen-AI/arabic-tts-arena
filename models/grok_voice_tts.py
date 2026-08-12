@@ -6,8 +6,8 @@ Docs:  https://docs.x.ai/developers/model-capabilities/audio/text-to-speech
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 API_URL = "https://openrouter.ai/api/v1/audio/speech"
 MODEL_SLUG = "x-ai/grok-voice-tts-1.0"
@@ -27,7 +27,7 @@ grok_voice_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=grok_voice_tts_image,
     scaledown_window=60,
     retries=0,

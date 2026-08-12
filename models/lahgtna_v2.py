@@ -27,8 +27,8 @@ Router: https://huggingface.co/oddadmix/dialect-router-v0.1
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 # ---------------------------------------------------------------------------
 # Dialect → Chatterbox language code + reference audio mapping
@@ -227,7 +227,7 @@ class DialectRouter:
 # ---------------------------------------------------------------------------
 
 @register_model
-@app.cls(
+@arena_cls(
     image=lahgtna_v2_image,
     gpu="T4",
     scaledown_window=120,
@@ -249,6 +249,7 @@ class LahgtnaV2Model(BaseTTSModel):
     display_name = "Lahgatna 2.0"
     model_url = "https://huggingface.co/oddadmix/lahgtna-chatterbox-v1"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

@@ -10,8 +10,8 @@ Paper:  https://arxiv.org/abs/2509.24650
 """
 
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_REPO = "openbmb/VoxCPM2"
 
@@ -54,7 +54,7 @@ voxcpm2_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=voxcpm2_image,
     gpu="A10G",
     scaledown_window=60,

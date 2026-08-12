@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 MODEL_NAME = "OpenMOSS-Team/MOSS-TTS-Nano-100M"
 AUDIO_TOKENIZER_NAME = "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano"
@@ -40,7 +40,7 @@ moss_tts_nano_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=moss_tts_nano_image,
     gpu="T4",
     scaledown_window=60,
@@ -55,6 +55,7 @@ class MossTTSNanoModel(BaseTTSModel):
     display_name = "MOSS-TTS Nano"
     model_url = "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @staticmethod
     def _waveform_to_soundfile_array(wav):

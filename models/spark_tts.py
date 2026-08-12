@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 import re
 import unicodedata
 
@@ -103,7 +103,7 @@ spark_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=spark_tts_image,
     gpu="T4",
     scaledown_window=120,
@@ -121,6 +121,7 @@ class SparkTTSModel(BaseTTSModel):
     display_name = "Arabic Spark TTS"
     model_url = "https://huggingface.co/IbrahimSalah/Arabic-TTS-Spark"
     gpu = "T4"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):

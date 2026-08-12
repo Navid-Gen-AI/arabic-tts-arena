@@ -5,9 +5,12 @@ Contains:
 - MODEL_REGISTRY: dict mapping model_id → {class_name, display_name}
 - BaseTTSModel: base class all TTS models inherit from
 - register_model: decorator to register a model
+- arena_cls: @app.cls wrapper that skips Modal deployment for retired models
 - Auto-discovery of all model files in this directory
 
 To add a new model, create models/your_model.py and use @register_model.
+To retire a model, set `retired = True` on its class (and flip it back to
+return the model to the arena).
 """
 
 import io
@@ -39,6 +42,9 @@ def register_model(cls):
             API-based models that don't use a GPU.
         open_weight: bool — True (default) for open-weight models, False for
             proprietary / closed-source API models.
+        retired: bool — True for models no longer deployed on Modal but kept
+            in the registry for leaderboard history. Pair with @arena_cls so
+            the class is also skipped at deploy time.
     """
     model_id = getattr(cls, "model_id", None)
     if model_id is None:
@@ -47,14 +53,35 @@ def register_model(cls):
     model_url = getattr(cls, "model_url", "")
     gpu = getattr(cls, "gpu", "")
     open_weight = getattr(cls, "open_weight", True)
+    retired = getattr(cls, "retired", False)
     MODEL_REGISTRY[model_id] = {
         "class_name": cls.__name__,
         "display_name": display_name,
         "model_url": model_url,
         "gpu": gpu,
         "open_weight": open_weight,
+        "retired": retired,
     }
     return cls
+
+
+def arena_cls(**modal_kwargs):
+    """Drop-in replacement for @app.cls that respects the `retired` flag.
+
+    Active models are wrapped with @app.cls exactly as before. Retired models
+    (class attribute `retired = True`) are returned unwrapped, so they are
+    never registered on the Modal app or deployed — while @register_model
+    above still records their metadata for leaderboard history.
+    """
+    def wrap(cls):
+        if getattr(cls, "retired", False):
+            return cls
+        # Imported here, not at module top: this package is bundled into every
+        # model container, and importing `app` lazily keeps the two modules
+        # free of an import-order dependency.
+        from app import app
+        return app.cls(**modal_kwargs)(cls)
+    return wrap
 
 
 # =============================================================================
@@ -87,7 +114,7 @@ def _install_auto_timing(cls):
 
     Runs from BaseTTSModel.__init_subclass__, i.e. when the class body
     finishes executing — after @modal.method() has wrapped synthesize but
-    before @app.cls / @register_model run. For a @modal.method() the real
+    before @arena_cls / @register_model run. For a @modal.method() the real
     function lives on the wrapper's `raw_f`, which is what Modal executes in
     the container (this module is re-imported there, so the patch applies
     remotely too). If Modal ever changes that internal, we degrade
@@ -136,7 +163,7 @@ class BaseTTSModel:
     RuntimeError for backend/API failures) — never catch-and-return an error
     dict. service.py catches exceptions at the .remote() call site and degrades
     gracefully; swallowing errors model-side hides failures from Modal's
-    dashboard and logs. Pair with retries=0 on @app.cls so broken models fail
+    dashboard and logs. Pair with retries=0 on @arena_cls so broken models fail
     fast and visibly.
 
     Synthesis timing is automatic: every subclass's synthesize() is wrapped at
@@ -202,92 +229,8 @@ class BaseTTSModel:
 # Auto-discover model files
 # =============================================================================
 
-# Retired models — no longer deployed on Modal but kept for leaderboard history.
-# To retire a model: add its entry here (copy display_name, model_url, gpu,
-# open_weight from the model file). _SKIP is derived automatically.
-RETIRED_MODELS: dict[str, dict] = {
-    "lahgtna": {
-        "display_name": "Lahgtna",
-        "model_url": "https://huggingface.co/oddadmix/lahgtna-chatterbox-v0",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "speecht5_ar": {
-        "display_name": "SpeechT5 Arabic",
-        "model_url": "https://huggingface.co/MBZUAI/speecht5_tts_clartts_ar",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "oute_tts": {
-        "display_name": "OuteTTS 1.0",
-        "model_url": "https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B",
-        "gpu": "A10G",
-        "open_weight": True,
-    },
-    "spark_tts": {
-        "display_name": "Arabic Spark TTS",
-        "model_url": "https://huggingface.co/IbrahimSalah/Arabic-TTS-Spark",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "silma_tts_v1_large": {
-        "display_name": "SILMA TTS v1 Large",
-        "model_url": "https://silma.ai/arabic-tts-models",
-        "gpu": "",
-        "open_weight": False,
-    },
-    "moss_tts": {
-        "display_name": "MOSS-TTS",
-        "model_url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS",
-        "gpu": "A100-40GB",
-        "open_weight": True,
-    },
-    "chatterbox": {
-        "display_name": "Multilingual Chatterbox",
-        "model_url": "https://huggingface.co/ResembleAI/chatterbox",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "fish_speech": {
-        "display_name": "Fish Speech S1-mini",
-        "model_url": "https://huggingface.co/fishaudio/s1-mini",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "kani_tts": {
-        "display_name": "KaniTTS Arabic",
-        "model_url": "https://huggingface.co/nineninesix/kani-tts-400m-ar",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "lahgtna_v2": {
-        "display_name": "Lahgatna 2.0",
-        "model_url": "https://huggingface.co/oddadmix/lahgtna-chatterbox-v1",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "moss_tts_nano": {
-        "display_name": "MOSS-TTS Nano",
-        "model_url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "arabic_f5_tts": {
-        "display_name": "Arabic F5-TTS",
-        "model_url": "https://huggingface.co/IbrahimSalah/Arabic-F5-TTS-v2",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-    "habibi_tts": {
-        "display_name": "Habibi TTS",
-        "model_url": "https://github.com/SWivid/Habibi-TTS",
-        "gpu": "T4",
-        "open_weight": True,
-    },
-}
-
-# Files to skip during auto-discovery (not real models, or retired — see above)
-_SKIP = {"__init__", "example_api_model"} | set(RETIRED_MODELS)
+# Files to skip during auto-discovery (not real models)
+_SKIP = {"__init__", "example_api_model"}
 
 
 def _discover_models():
@@ -301,19 +244,5 @@ def _discover_models():
 
 _discover_models()
 
-# Tag active models, then merge retired models into the registry
-for _info in MODEL_REGISTRY.values():
-    _info.setdefault("retired", False)
 
-for _mid, _meta in RETIRED_MODELS.items():
-    MODEL_REGISTRY[_mid] = {
-        "class_name": "",
-        "display_name": _meta["display_name"],
-        "model_url": _meta["model_url"],
-        "gpu": _meta["gpu"],
-        "open_weight": _meta["open_weight"],
-        "retired": True,
-    }
-
-
-__all__ = ["MODEL_REGISTRY", "RETIRED_MODELS", "BaseTTSModel", "register_model"]
+__all__ = ["MODEL_REGISTRY", "BaseTTSModel", "register_model", "arena_cls"]

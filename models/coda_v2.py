@@ -14,8 +14,8 @@ import os
 
 import modal
 
-from app import app, LOCAL_MODULES
-from models import BaseTTSModel, register_model
+from app import LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
 
 BASE_URL = "https://coda.eracoda.ai/api/tts"
 PUBLIC_MODEL = "Coda-V2"
@@ -45,7 +45,7 @@ coda_v2_image = (
 # 2. Register the model
 # ---------------------------------------------------------------------------
 @register_model
-@app.cls(
+@arena_cls(
     image=coda_v2_image,
     # Leaderboard latency is timed around the whole remote call, so container
     # cold starts count against us. Keep the (cheap, CPU-only) container warm

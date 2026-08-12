@@ -1,6 +1,6 @@
 import modal
-from models import BaseTTSModel, register_model
-from app import app, LOCAL_MODULES
+from models import BaseTTSModel, arena_cls, register_model
+from app import LOCAL_MODULES
 
 oute_tts_image = (
     modal.Image.from_registry(
@@ -42,7 +42,7 @@ oute_tts_image = (
 
 
 @register_model
-@app.cls(
+@arena_cls(
     image=oute_tts_image,
     gpu="A10G",
     scaledown_window=60,
@@ -62,6 +62,7 @@ class OuteTTSModel(BaseTTSModel):
     display_name = "OuteTTS 1.0"
     model_url = "https://huggingface.co/OuteAI/Llama-OuteTTS-1.0-1B"
     gpu = "A10G"
+    retired = True   # not deployed on Modal; kept for leaderboard history
 
     @modal.enter()
     def load_model(self):
