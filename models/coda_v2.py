@@ -63,6 +63,7 @@ class CodaV2Model(BaseTTSModel):
     model_url = "https://coda.eracoda.ai"
     gpu = ""            # API-based — the GPU is on Coda's side
     open_weight = False
+    retired = True      # superseded by Coda-V4 (models/coda_v4.py); kept for leaderboard history
 
     # ── Lifecycle ──────────────────────────────────────────────────────────
     @modal.enter()
